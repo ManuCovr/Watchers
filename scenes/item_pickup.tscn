@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://urvw305r2xjf"]
+
+[ext_resource type="Script" uid="uid://pdyt6nnhx3n8" path="res://scripts/item_pickup.gd" id="1"]
+
+[node name="ItemPickup" type="StaticBody3D"]
+collision_layer = 128
+collision_mask = 0
+input_ray_pickable = false
+script = ExtResource("1")
+prompt = "Pick up flashlight"

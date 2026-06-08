@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MovementTuning" format=3 uid="uid://x55mvu5ffham"]
+
+[ext_resource type="Script" uid="uid://b8xsqg6fwtwe4" path="res://scripts/resources/movement_tuning.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+sprint_max_time = 5.0
+sprint_recharge = 1.0
+mouse_sensitivity = 0.001
+eye_height = 1.45

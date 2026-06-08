@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://kjmjlyhdvo16"]
+
+[ext_resource type="Script" uid="uid://dp4yo5u4uohmu" path="res://scripts/player.gd" id="1"]
+[ext_resource type="Resource" uid="uid://x55mvu5ffham" path="res://resources/movement/default_movement.tres" id="2"]
+[ext_resource type="Texture2D" uid="uid://q18y102sopyn" path="res://assets/emotes/middlefinger.png" id="3"]
+[ext_resource type="Texture2D" uid="uid://cawte4gohkyyx" path="res://assets/emotes/povmiddlefinger.png" id="4"]
+
+[node name="Player" type="CharacterBody3D" unique_id=1054380618]
+script = ExtResource("1")
+tuning = ExtResource("2")
+emote_texture = ExtResource("3")
+pov_texture = ExtResource("4")
+emote_size = 0.001

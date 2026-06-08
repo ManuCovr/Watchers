@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://b2ewq84ut37i7"]
+
+[ext_resource type="Script" path="res://scripts/character_rig.gd" id="1_char"]
+
+[node name="Character" type="Node3D" unique_id=1458585806]
+script = ExtResource("1_char")
+eye_size = Vector3(0.3, 0.3, 0.2)
+mouth_min = 0.01

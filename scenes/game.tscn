@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://d1x70q5285xfo"]
+
+[ext_resource type="Script" uid="uid://cjr5436n63tuo" path="res://scripts/game.gd" id="1"]
+[ext_resource type="Resource" path="res://resources/default_game.tres" id="2"]
+[ext_resource type="PackedScene" uid="uid://dngprid8cmtkl" path="res://scenes/bunker.tscn" id="3"]
+
+[node name="Game" type="Node3D" unique_id=2132008495]
+script = ExtResource("1")
+config = ExtResource("2")
+
+[node name="Bunker" parent="." unique_id=479980831 instance=ExtResource("3")]

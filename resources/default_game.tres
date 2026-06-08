@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="GameConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/game_config.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+watcher_count = 1
+watcher_speed = 2.4
+watcher_accel = 6.0
+catch_distance = 1.15
+danger_range = 8.0
+relay_charge_rate = 0.16
+relay_decay_rate = 0.13
+switch_pull_time = 0.7
+require_final_lockdown = true
+flashlight_drain = 0.016
+locked_doors = false
