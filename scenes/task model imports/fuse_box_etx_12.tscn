@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://ducdss0mncp27"]
+
+[ext_resource type="PackedScene" uid="uid://cdmsi5xsksuco" path="res://assets/tech/fuse_box_etx_1.glb" id="1_ikwd7"]
+
+[node name="fuse_box_etx_12" unique_id=249294926 instance=ExtResource("1_ikwd7")]
+
+[node name="fuse_box_etx_1_door" parent="fuse_box_etx_1" parent_id_path=PackedInt32Array(1152881447) index="0" unique_id=1517517686]
+transform = Transform3D(-0.19517037, -0.6374582, 0, 0.6374582, -0.19517037, 0, 0, 0, 0.6666666, -0.1790003, 0.18499994, 0)

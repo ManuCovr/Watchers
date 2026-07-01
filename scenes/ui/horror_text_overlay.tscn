@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://r0ysyue6csv1"]
+
+[ext_resource type="Script" path="res://scripts/ui/horror_text_overlay.gd" id="1_horror"]
+
+[node name="HorrorTextOverlay" type="CanvasLayer"]
+script = ExtResource("1_horror")

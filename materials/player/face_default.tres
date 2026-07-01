@@ -1,0 +1,13 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+; Neutral off-white face-plate material. Assign this to the FacePlate slot in Blender's place
+; (or here) so the plate is a clean canvas — Godot prints custom face textures onto its
+; albedo at runtime (PlayerModelView.set_face_texture). Kept light + matte; emission is added
+; in code only when a face is shown, so plain faces still read in the dark bunker.
+
+[resource]
+resource_name = "M_FacePlate"
+albedo_color = Color(0.91, 0.89, 0.85, 1)
+roughness = 1.0
+metallic = 0.0
+texture_filter = 0

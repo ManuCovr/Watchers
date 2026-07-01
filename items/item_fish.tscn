@@ -1,0 +1,36 @@
+[gd_scene load_steps=2 format=3]
+
+; Fish: light, floppy, stupid. LMB = a wide silly slap-swing, Q charge-throw, E drop. Tiny knockback.
+; Hit = the downloaded cartoon-bonk.
+
+[ext_resource type="Script" path="res://scripts/items/physics_item.gd" id="1_phys"]
+
+[node name="ItemFish" type="RigidBody3D"]
+script = ExtResource("1_phys")
+item_name = "fish"
+model_path = "res://assets/psx2/Props/fish_mx_1.glb"
+model_scale = 2.2
+model_euler = Vector3(0, 0, 0)
+item_mass = 0.8
+hold_position_offset = Vector3(0.3, -0.2, 0)
+hold_rotation_degrees = Vector3(12, 90, 62)
+hold_distance = 0.62
+hold_rotation_lerp_speed = 12.0
+can_swing = true
+swing_axis = Vector3(0, 1, 0)
+swing_angle_degrees = 125.0
+swing_windup_back = 0.35
+swing_pivot_offset = Vector3(0, -0.2, 0.1)
+windup_time = 0.12
+active_time = 0.18
+recovery_time = 0.2
+swing_cooldown = 0.45
+swing_knockback = 2.5
+swing_up = 0.4
+throw_min_force = 4.0
+throw_max_force = 12.0
+throw_spin = 10.0
+impact_knockback = 2.0
+max_knockback = 5.0
+impact_sound = "res://assets/audio/sfx/bonk_cartoon_hit.wav"
+swing_sound = "res://assets/audio/sfx/footstep_wood_a_6.ogg"

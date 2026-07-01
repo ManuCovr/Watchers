@@ -15,6 +15,9 @@ func set_scared(_v: float) -> void: pass         ## scream
 func set_move(_v: float) -> void: pass           ## 0..1 walking
 func set_smoking(_on: bool) -> void: pass        ## body cigarette on/off
 func set_reach(_v: float) -> void: pass          ## 0..1 gang-beasts arm reach
+func set_movement_lean(_local_move: Vector3, _delta: float) -> void: pass  ## visual lean toward movement
+func set_look_pitch(_pitch: float) -> void: pass  ## tilt the head/body with the camera look (radians)
+func set_crouch(_amount: float) -> void: pass     ## 0 = standing, 1 = fully crouched (squash)
 
 
 ## Put every visual under this rig on the self layer, so the owning player's camera hides their own

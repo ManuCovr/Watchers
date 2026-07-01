@@ -19,8 +19,29 @@ signal progress_changed(task: Task, ratio: float)
 @export var show_beacon := true             ## floating name + light beam so players find it
 @export var beacon_color := Color(1.0, 0.78, 0.3)
 
+## ---- Pool metadata -----------------------------------------------------------
+## The round selector (game.gd::_select_round_tasks) reads ONLY this metadata — it never needs to
+## know a task's concrete type. Add a new task type, give it sane metadata here (or in its _build),
+## and it joins the pool automatically. Subclasses set type-appropriate defaults in _build() while
+## still default (so a value authored per-instance in bunker.tscn wins).
+@export_group("Pool Metadata")
+@export var task_id: StringName = &""             ## stable id (optional; defaults to node name)
+@export_range(1, 3) var difficulty := 2           ## 1 easy · 2 medium · 3 hard
+@export var task_category: StringName = &"physical"  ## physical · puzzle · coop · meme · carry
+@export var zone_id: StringName = &""             ## bunker wing, for zone-spread selection
+@export var zone_display_name := ""               ## human room label shown in the HUD ("Pipe Room", "Security")
+@export var estimated_duration := 6.0             ## seconds, rough (for pacing/assignment later)
+@export var allow_personal_assignment := true     ## reserved for the deferred personal-task pass
+@export var requires_two_players := false          ## co-op: needs a second living player to finish
+@export_range(1, 4) var min_players_required := 1  ## not eligible below this player count
+@export var meme_task := false                     ## rare/funny — selected sparingly
+@export var puzzle_task := false                   ## thinking task — selector tracks these
+
 var done := false
+var active := true                                 ## selected this round? inactive = set-dressing only
 var _beacon: Node3D
+var _beacon_lamp: OmniLight3D
+var _beacon_phase := 0.0
 
 
 ## True if the title is still the base placeholder — lets a subclass set a default title in _build
@@ -38,29 +59,84 @@ func _ready() -> void:
 	add_to_group("tasks")
 
 
-## NO floating text. Just a soft local glow so the task OBJECT itself is readable in the
-## dark (the work is found by light + the prop's look, not a label). Hidden on done.
+## NO floating text. A diegetic STATUS LAMP on the fixture: a slow "unfinished job" breathe in the
+## dark that WAKES UP (brighter + a faster pulse) as a player approaches — so the task that's near
+## you visibly calls for attention, without an arcade marker. (When personal assignment lands, swap
+## the proximity drive in _update_beacon for an is-assigned-to-me check.) Hidden when inactive/done.
 func _build_beacon() -> void:
 	_beacon = Node3D.new()
 	_beacon.name = "Glow"
 	add_child(_beacon)
-	var lamp := OmniLight3D.new()
-	lamp.light_color = beacon_color
-	lamp.light_energy = 2.4
-	lamp.omni_range = 5.0
-	lamp.omni_attenuation = 1.4
-	lamp.position = Vector3(0, 1.4, 0)
-	_beacon.add_child(lamp)
+	_beacon_lamp = OmniLight3D.new()
+	_beacon_lamp.light_color = beacon_color
+	_beacon_lamp.light_energy = 0.8
+	_beacon_lamp.omni_range = 4.5
+	_beacon_lamp.omni_attenuation = 1.6
+	_beacon_lamp.position = Vector3(0, 1.4, 0)
+	_beacon.add_child(_beacon_lamp)
+
+
+## Visual only — runs on EVERY copy (host + clients), before the authority gate in _process.
+func _update_beacon(delta: float) -> void:
+	if _beacon_lamp == null or _beacon == null or not _beacon.visible:
+		return
+	var nearest := 999.0
+	var p := nearest_player()
+	if p != null:
+		nearest = global_position.distance_to(p.global_position)
+	var prox := clampf(1.0 - nearest / 14.0, 0.0, 1.0)   # 0 far → 1 right on top of it
+	_beacon_phase += delta * lerpf(1.6, 5.5, prox)        # idle breathe → insistent pulse up close
+	var breathe := 0.55 + 0.45 * sin(_beacon_phase)
+	_beacon_lamp.light_energy = lerpf(0.7, 2.8, prox) * breathe
 
 
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return                     # editor: don't run gameplay simulation
+	_update_beacon(delta)          # VISUAL status lamp — every copy, even on clients
 	# Tasks are simulated by the server (or solo). Clients show them statically for
 	# now; networked task interaction is the next netcode step.
-	if done or not Net.is_authority():
+	# Inactive (not selected this round) tasks never simulate — they're just props.
+	if done or not active or not Net.is_authority():
 		return
 	_task_process(delta)
+
+
+# ---- Round selection --------------------------------------------------------
+## True only if this task should count toward the level's objective tally THIS round.
+func counts_for_win() -> bool:
+	return active and counts_toward_win
+
+
+## game.gd flips this after collecting the pool. Inactive tasks drop their beacon + interact
+## targets (so no prompt, no glow, not aimable) and stop simulating — the prop remains as
+## set-dressing so the bunker still reads as a facility full of (mostly broken) systems.
+func set_active(on: bool) -> void:
+	if active == on:
+		return
+	active = on
+	_apply_active()
+
+
+func _apply_active() -> void:
+	if _beacon != null:
+		_beacon.visible = active
+	_set_interactables_targetable(self, active)
+	_on_active_changed(active)
+
+
+func _set_interactables_targetable(n: Node, on: bool) -> void:
+	if n is Interactable:
+		var it := n as Interactable
+		it.enabled = on
+		it.set_targetable(on)
+	for c in n.get_children():
+		_set_interactables_targetable(c, on)
+
+
+## Override to dim/brighten type-specific lights when a task is (de)selected. Default: nothing.
+func _on_active_changed(_on: bool) -> void:
+	pass
 
 
 # ---- Override points --------------------------------------------------------

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://2tuvv358yqet"
-path="res://.godot/imported/soap_mx_1_soap_mx_1.png-11e90751a57052ba3e92b6ea1673077c.ctex"
+path.s3tc="res://.godot/imported/soap_mx_1_soap_mx_1.png-11e90751a57052ba3e92b6ea1673077c.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "72b7f4ca014dc821b7eaf7535f1766a9"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx2/Props/soap_mx_1_soap_mx_1.png"
-dest_files=["res://.godot/imported/soap_mx_1_soap_mx_1.png-11e90751a57052ba3e92b6ea1673077c.ctex"]
+dest_files=["res://.godot/imported/soap_mx_1_soap_mx_1.png-11e90751a57052ba3e92b6ea1673077c.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

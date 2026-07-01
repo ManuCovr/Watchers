@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="HandPoseResource" format=3]
+
+[ext_resource type="Script" path="res://scripts/player/hand_pose_resource.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+pose_name = &"tool_grip"
+finger_curls = PackedFloat32Array(0.85, 0.95, 0.95)
+hold_lerp_speed = 18.0

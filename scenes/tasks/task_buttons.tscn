@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://dnu0gyxhycq4y"]
 
-[ext_resource type="Script" path="res://scripts/tasks/task_buttons.gd" id="1"]
+[ext_resource type="Script" uid="uid://dswhn5a0yxcbp" path="res://scripts/tasks/task_buttons.gd" id="1"]
 
-[node name="ButtonPanelTask" type="Node3D"]
+[node name="ButtonPanelTask" type="Node3D" unique_id=81911889]
 script = ExtResource("1")
+task_title = "Key in the control sequence"

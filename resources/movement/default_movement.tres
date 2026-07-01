@@ -5,6 +5,8 @@
 [resource]
 script = ExtResource("1")
 sprint_max_time = 5.0
-sprint_recharge = 1.0
+sprint_recharge = 2.5
+sprint_min_to_start = 1.5
 mouse_sensitivity = 0.001
-eye_height = 1.45
+eye_height = 1.4
+bob_amplitude = 0.05

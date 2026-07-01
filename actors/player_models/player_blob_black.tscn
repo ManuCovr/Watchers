@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://cfiyacox6jjny"]
+
+[ext_resource type="Script" uid="uid://0ale1wwxccy0" path="res://scripts/player/player_model_view.gd" id="1_jle4d"]
+[ext_resource type="PackedScene" uid="uid://t7kcrn6apqtl" path="res://assets/player_blobs/glb/player_blob_black.glb" id="2_uhr03"]
+[ext_resource type="PackedScene" uid="uid://dv321ijxn23gv" path="res://assets/psx/Small Props/cig_1.glb" id="3_uhr03"]
+
+[node name="PlayerBlobModel" type="Node3D" unique_id=1473178885]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.16476631, 0)
+script = ExtResource("1_jle4d")
+outline_thickness = 0.03
+
+[node name="ModelRoot" parent="." unique_id=378461977 instance=ExtResource("2_uhr03")]
+
+[node name="FaceAnchor" type="Marker3D" parent="." unique_id=1671855760]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.06640108, 1.1592286, -0.2936959)
+
+[node name="LeftHandAnchor" type="Marker3D" parent="." unique_id=422387268]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4, 0.78, -0.34)
+
+[node name="RightHandAnchor" type="Marker3D" parent="." unique_id=1965180760]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, 0.78, -0.34)
+
+[node name="NameplateAnchor" type="Marker3D" parent="." unique_id=403682844]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08854172, 1.85, 0)
+
+[node name="cig_12" parent="." unique_id=1448909211 instance=ExtResource("3_uhr03")]
+transform = Transform3D(0.50911665, 0, -1.4109572, 0, 1.5, 0, 1.4109572, 0, 0.50911665, -0.007990273, 1.0625687, -0.3531805)

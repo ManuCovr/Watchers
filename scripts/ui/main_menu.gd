@@ -2,6 +2,9 @@ extends Control
 ## Title screen. Cinematic composition: the title + nav column sit on the LEFT, the angel
 ## looms out of the fog on the RIGHT. Solo play goes through the lobby; Host/Join start an
 ## ENet session. Full creative pass — no centred box.
+##
+## Fonts come from MenuUI (now Pirata One title + Alegreya Sans SC body), so the whole menu family
+## (main / pause / options) shares the look — nothing font-related is hardcoded here.
 
 const LOBBY := "res://scenes/lobby.tscn"
 const GAME := "res://scenes/game.tscn"
@@ -11,10 +14,24 @@ var _options: OptionsMenu
 var _ip_field: LineEdit
 var _join_row: Control
 var _status: Label
-var _bg_angel: Node3D
+var _bg_cam: Camera3D
 var _fade: ColorRect
-var _title: Label
+var _title: Control
+var _tagline: Label
 var _t := 0.0
+
+@export_group("Backdrop PSX grade")
+@export var backdrop_darken := 0.52     ## lower = dimmer lobby behind the menu
+@export var backdrop_colors := 8        ## PSX colour-banding amount (lower = crunchier)
+@export var backdrop_dither := 2        ## dither block size
+@export var backdrop_desaturate := 0.42 ## drains the warm luxury colour
+@export var background_dim := 0.46       ## extra black wash over the backdrop (behind the UI)
+
+@export_group("Layout")
+@export var left_margin := 96.0
+@export var top_margin := 90.0          ## breathing room from the top of the screen to the title
+
+var _nav: VBoxContainer
 
 
 func _ready() -> void:
@@ -22,10 +39,11 @@ func _ready() -> void:
 	Net.leave()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_bg()
-	add_child(MenuUI.dim_bg(0.34))
-	add_child(MenuUI.vignette(0.7))
+	add_child(MenuUI.dim_bg(background_dim))
+	add_child(MenuUI.vignette(0.78))
 	_build_content()
 	_build_fade()
+	_build_horror_accent()
 
 	if "--host" in OS.get_cmdline_user_args():
 		_on_host.call_deferred()
@@ -35,55 +53,87 @@ func _ready() -> void:
 
 # ---- layout -----------------------------------------------------------------
 func _build_content() -> void:
-	# Left-anchored column. Anchored to the left edge, vertically centred.
+	# Centred column: the title + nav stack live dead-centre of the screen.
 	var col := VBoxContainer.new()
+	_nav = col
 	col.add_theme_constant_override("separation", 6)
-	col.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	col.position = Vector2(96, -210)
-	col.grow_vertical = Control.GROW_DIRECTION_BOTH
+	col.set_anchors_preset(Control.PRESET_FULL_RECT)   # fill the screen; centre the stack inside it
+	col.alignment = BoxContainer.ALIGNMENT_CENTER       # vertical centring
+	col.offset_top = -120                               # bias the whole stack up a touch
 	add_child(col)
+	_title = _build_title()                          # the painted DON'T BLINK logo (assets/ui/title.png)
+	# Nudge the logo a hair right (the artwork sits a touch left of optical centre).
+	var title_wrap := MarginContainer.new()
+	title_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	title_wrap.add_theme_constant_override("margin_left", 18)
+	title_wrap.add_child(_title)
+	col.add_child(title_wrap)
 
-	_title = MenuUI.title("WATCHERS", 104)
-	col.add_child(_title)
-	var tag := MenuUI.tagline("they move when you look away")
-	tag.position.x = 6
-	col.add_child(tag)
+	col.add_child(_spacer(28))
 
-	col.add_child(_spacer(26))
-
-	var play := MenuUI.button("Play  (Solo)", true)
-	col.add_child(play); play.pressed.connect(_on_play)
-	var host := MenuUI.button("Host  Co-op")
-	col.add_child(host); host.pressed.connect(_on_host)
-	var join := MenuUI.button("Join  by IP")
-	col.add_child(join); join.pressed.connect(_reveal_join)
+	var play := _nav_button("Play", true); play.pressed.connect(_on_play)
+	_nav_button("Host Game").pressed.connect(_on_host)
+	_nav_button("Join by IP").pressed.connect(_reveal_join)
 
 	# Hidden join row (LineEdit + Connect) revealed by "Join".
 	_join_row = _build_join_row()
 	col.add_child(_join_row)
 
 	col.add_child(_spacer(6))
-	var opt := MenuUI.button("Options")
-	col.add_child(opt); opt.pressed.connect(_on_options)
-	var quit := MenuUI.button("Quit")
-	col.add_child(quit); quit.pressed.connect(func(): get_tree().quit())
+	_nav_button("Options").pressed.connect(_on_options)
+	_nav_button("Quit").pressed.connect(func(): get_tree().quit())
 
 	_status = MenuUI.hint("")
+	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_status.add_theme_color_override("font_color", Color(0.85, 0.78, 0.5))
 	col.add_child(_status)
 
-	# Footer bottom-left.
-	var foot := MenuUI.hint("v0.9  ·  co-op horror  ·  ESC menu  ·  hold F to flip the bird")
-	foot.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	foot.position = Vector2(96, -40)
+	# Footer centred along the bottom.
+	var foot := MenuUI.hint("v0.9  ·  C to smoke  ·  F to flip the bird")
+	foot.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	foot.offset_top = -52
+	foot.offset_bottom = -28
 	add_child(foot)
 
 	play.grab_focus()
+
+	# Entrance: the whole stack fades up under the black wipe.
+	col.modulate.a = 0.0
+	var tw := create_tween().set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_interval(0.15)
+	tw.tween_property(col, "modulate:a", 1.0, 0.8)
+
+
+## A centred nav word added to the column (centre-aligned, shrink-to-fit so it sits mid-screen).
+func _nav_button(text: String, big := false) -> Button:
+	var b := MenuUI.button(text, big)
+	b.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_nav.add_child(b)
+	return b
+
+
+## The DON'T BLINK wordmark as a painted image (assets/ui/title.png) instead of rendered type. Sized to
+## the image's exact aspect (so the TitleEye overlay maps with no letterboxing); the _process
+## shimmer/breathe still drives its modulate + scale, and the eye's pupil follows the cursor.
+func _build_title() -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = load("res://assets/ui/title.png")
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.custom_minimum_size = Vector2(600, 383)   # 1407x898 trimmed source, aspect 1.567 (no letterbox)
+	t.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.add_child(TitleEye.new())                 # the pupil that tracks the mouse
+	return t
 
 
 func _build_join_row() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
+	row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	row.visible = false
 	_ip_field = LineEdit.new()
 	_ip_field.placeholder_text = "host IP  (127.0.0.1)"
@@ -120,6 +170,15 @@ func _reveal_join() -> void:
 	_ip_field.select_all()
 
 
+## A small taste of dread under the luxury hotel: rare light-dip flicker, a distant drone under the
+## jazz, and a rare subtitle glitch. All tunable/disable-able on the HorrorAccent node.
+func _build_horror_accent() -> void:
+	var accent := MainMenuHorrorAccent.new()
+	accent.name = "HorrorAccent"
+	add_child(accent)
+	accent.setup(self, _tagline)
+
+
 func _build_fade() -> void:
 	_fade = ColorRect.new()
 	_fade.color = Color(0, 0, 0, 1)
@@ -132,91 +191,61 @@ func _build_fade() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
-	if _bg_angel != null:
-		_bg_angel.rotate_y(delta * 0.22)
-	if _title != null:
-		# a faint, irregular flicker on the title (unsettling, not distracting)
-		var f := 0.94 + 0.06 * sin(_t * 2.3) * sin(_t * 7.7)
-		_title.modulate = Color(f, f, f)
+	# Slow, gentle drift across the lounge toward the doorway — luxury establishing shot, never jarring.
+	if _bg_cam != null:
+		var x := 2.8 + sin(_t * 0.10) * 2.2
+		var y := 1.58 + sin(_t * 0.18) * 0.07
+		var z := 7.2 + cos(_t * 0.08) * 1.2
+		_bg_cam.position = Vector3(x, y, z)
+		_bg_cam.look_at(Vector3(-0.8, 1.25, -3.8), Vector3.UP)
 
 
-# ---- 3D backdrop: the angel looming on the RIGHT, slowly turning -------------
+# ---- 3D backdrop: the LUXURY HOTEL LOBBY as a live establishing shot ---------
 func _build_bg() -> void:
 	var svc := SubViewportContainer.new()
 	svc.set_anchors_preset(Control.PRESET_FULL_RECT)
 	svc.stretch = true
 	svc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# PSX grade on the BACKDROP ONLY (samples the lobby render, never the UI text on top): dither +
+	# dim + cold desaturated wash — the warm hotel, but something's wrong under it.
+	var sh := load("res://shaders/psx_backdrop.gdshader") as Shader
+	if sh != null:
+		var mat := ShaderMaterial.new()
+		mat.shader = sh
+		mat.set_shader_parameter("colors", backdrop_colors)
+		mat.set_shader_parameter("dither_size", backdrop_dither)
+		mat.set_shader_parameter("darken", backdrop_darken)
+		mat.set_shader_parameter("desaturate", backdrop_desaturate)
+		svc.material = mat
 	add_child(svc)
 	var sv := SubViewport.new()
 	sv.own_world_3d = true
 	sv.size = Vector2i(1600, 900)
 	svc.add_child(sv)
-
-	var we := WorldEnvironment.new()
-	var e := Environment.new()
-	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.012, 0.012, 0.018)
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.09, 0.09, 0.13)
-	e.ambient_light_energy = 0.35
-	e.fog_enabled = true
-	e.fog_density = 0.08
-	e.fog_light_color = Color(0.05, 0.04, 0.06)
-	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	e.glow_enabled = true
-	we.environment = e
-	sv.add_child(we)
-
-	var cam := Camera3D.new()
-	cam.fov = 52
-	sv.add_child(cam)
-	cam.look_at_from_position(Vector3(-0.2, 1.85, 4.6), Vector3(1.7, 1.25, 0), Vector3.UP)
-	cam.current = true
-
-	_bg_angel = Node3D.new()
-	_bg_angel.position = Vector3(1.7, 1.2, 0)        # framed on the RIGHT third
-	sv.add_child(_bg_angel)
-	var angel := MeshInstance3D.new()
-	var mesh = load("res://assets/models/angel/Biblically_Accurate_Angel.obj")
-	if mesh != null:
-		angel.mesh = mesh
-		angel.scale = Vector3.ONE * 1.3
-		var m := StandardMaterial3D.new()
-		m.albedo_color = Color(0.045, 0.045, 0.055)
-		m.roughness = 1.0
-		angel.material_override = m
-		_bg_angel.add_child(angel)
-	var eye := MeshInstance3D.new()
-	var sm := SphereMesh.new(); sm.radius = 0.13; sm.height = 0.26
-	eye.mesh = sm
-	var em := StandardMaterial3D.new()
-	em.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	em.emission_enabled = true
-	em.emission = Color(1.0, 0.07, 0.04)
-	em.emission_energy_multiplier = 5.0
-	em.albedo_color = Color(1.0, 0.07, 0.04)
-	eye.material_override = em
-	eye.position = Vector3(0, 0.62, 0.92)
-	_bg_angel.add_child(eye)
-
-	var key := SpotLight3D.new()
-	key.light_color = Color(0.7, 0.74, 0.95)
-	key.light_energy = 3.2
-	key.spot_range = 16; key.spot_angle = 42
-	sv.add_child(key)
-	key.look_at_from_position(Vector3(3.6, 4.0, 3.2), Vector3(1.7, 1.4, 0), Vector3.UP)
+	# The real lobby as a backdrop (its own warm lights + jazz; no players/HUD/toys/pause).
+	var lobby: Node = load("res://scenes/lobby.tscn").instantiate()
+	lobby.set("backdrop_mode", true)
+	sv.add_child(lobby)
+	# A slow panning camera through the lounge toward the elevator — tighter FOV compresses the depth
+	# so the doorway reads as a focal point and the menu side falls into darker wall.
+	_bg_cam = Camera3D.new()
+	_bg_cam.fov = 52
+	sv.add_child(_bg_cam)
+	_bg_cam.current = true
+	_bg_cam.position = Vector3(2.8, 1.58, 7.2)
+	_bg_cam.look_at(Vector3(-0.8, 1.25, -3.8), Vector3.UP)
 
 
 # ---- networking (unchanged behaviour) ---------------------------------------
 func _on_play() -> void:
 	Net.leave()
-	get_tree().change_scene_to_file(LOBBY)
+	Transition.change_scene(LOBBY)
 
 
 func _on_host() -> void:
 	if Net.host_game():
 		_status.text = "Hosting on port %d — friends Join by your IP" % Net.DEFAULT_PORT
-		get_tree().change_scene_to_file(LOBBY)
+		Transition.change_scene(LOBBY)
 	else:
 		_status.text = "Could not open the server (port in use?)"
 
@@ -238,7 +267,7 @@ func _on_join() -> void:
 func _on_connected() -> void:
 	if Net.connect_failed.is_connected(_on_connect_failed):
 		Net.connect_failed.disconnect(_on_connect_failed)
-	get_tree().change_scene_to_file(LOBBY)
+	Transition.change_scene(LOBBY)
 
 
 func _on_connect_failed() -> void:

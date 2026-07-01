@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bvivu2v6vywpi"
-path="res://.godot/imported/wooden_crate_hx_6_wooden_crate_hx_2_1.png-f06ba9e5b85b816db35909e22a48a794.ctex"
+path.s3tc="res://.godot/imported/wooden_crate_hx_6_wooden_crate_hx_2_1.png-f06ba9e5b85b816db35909e22a48a794.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "36f7fcbf5e393ed1190921be89c8e916"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx2/Props/wooden_crate_hx_6_wooden_crate_hx_2_1.png"
-dest_files=["res://.godot/imported/wooden_crate_hx_6_wooden_crate_hx_2_1.png-f06ba9e5b85b816db35909e22a48a794.ctex"]
+dest_files=["res://.godot/imported/wooden_crate_hx_6_wooden_crate_hx_2_1.png-f06ba9e5b85b816db35909e22a48a794.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

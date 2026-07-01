@@ -41,6 +41,9 @@ const BACKING_PROBE_MASK := 2         ## walls live on physics layer 2
 @export var max_render_distance := 20.0  ## stop re-rendering when the player is beyond this
 @export var move_epsilon := 0.015     ## min camera move (m) before we re-render
 @export var rot_epsilon_deg := 0.35   ## min camera turn (deg) before we re-render
+## Keep re-rendering this long (s) AFTER the camera stops, so body animation (lean settle, bob)
+## finishes on screen instead of freezing mid-pose when you stand still.
+@export var settle_time := 0.7
 
 var _surface: MeshInstance3D
 var _frame: MeshInstance3D
@@ -49,6 +52,7 @@ var _cam: Camera3D
 var _mat: ShaderMaterial
 var _last_cam_pos := Vector3(1e9, 1e9, 1e9)
 var _last_cam_basis := Basis()
+var _settle := 0.0
 var _built := false
 var _backing_done := false
 
@@ -200,7 +204,7 @@ func _resize_viewport() -> void:
 
 
 # ---- per-frame: reflect the player camera, re-render on demand --------------
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not _built or _sv == null or _cam == null:
 		return
 	if not _backing_done:
@@ -212,10 +216,15 @@ func _process(_delta: float) -> void:
 	# Distance gate: skip work (and rendering) when the player is far from the glass.
 	if global_position.distance_to(pcam.global_position) > max_render_distance:
 		return
-	# Movement gate: only re-render when the camera has actually moved/turned enough.
+	# Movement gate: re-render while the camera moves AND for a short settle window after it stops,
+	# so the body's lean/bob finishes animating in the reflection instead of freezing mid-pose.
 	var moved := _last_cam_pos.distance_to(pcam.global_position) > move_epsilon
 	var turned := _basis_angle(_last_cam_basis, pcam.global_basis) > deg_to_rad(rot_epsilon_deg)
-	if not (moved or turned):
+	if moved or turned:
+		_settle = settle_time
+	elif _settle > 0.0:
+		_settle = maxf(0.0, _settle - delta)
+	else:
 		return
 	_last_cam_pos = pcam.global_position
 	_last_cam_basis = pcam.global_basis

@@ -11,7 +11,7 @@ const TECH := "res://assets/tech/"
 const TEX_WALL := "res://assets/psx/Modular Structures/beam_1_concrete_1.jpg"
 const TEX_FLOOR := "res://assets/textures/Tiles-Large.png"
 
-const ROOM := 9.0
+const ROOM := 10.5      ## a touch bigger than the original 9 (room to mess around, not cavernous)
 const CEIL := 4.0
 const MIRROR_LAYER_BIT := 1 << 18
 const BACK_WALL_BIT := 1 << 16
@@ -27,8 +27,13 @@ func _initialize() -> void:
 	_environment()
 	_lights()
 	_room()
-	_props()
+	_trim()
+	_lounge()
+	_plants()
+	_paintings()
 	_elevator()
+	_music()
+	_toys()
 	_mirror()
 	_markers()
 
@@ -96,9 +101,10 @@ func _environment() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.015, 0.015, 0.022)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.14, 0.15, 0.2)
-	env.ambient_light_energy = 0.22
-	env.fog_enabled = true; env.fog_density = 0.03; env.fog_light_color = Color(0.04, 0.045, 0.06)
+	env.background_color = Color(0.03, 0.028, 0.03)
+	env.ambient_light_color = Color(0.42, 0.37, 0.32)     # LUXURY: warm, clean, well-lit (not abandoned)
+	env.ambient_light_energy = 1.15
+	env.fog_enabled = true; env.fog_density = 0.005; env.fog_light_color = Color(0.2, 0.16, 0.14)
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.glow_enabled = true; env.glow_intensity = 0.4
 	we.environment = env
@@ -106,80 +112,265 @@ func _environment() -> void:
 
 
 func _lights() -> void:
-	_light(Vector3(0, CEIL - 0.5, 2.5), Color(1.0, 0.76, 0.48), 2.2, 9.0, "WarmBulb", true)
-	_light(Vector3(0, CEIL - 0.6, -ROOM + 2.5), Color(0.5, 0.68, 1.0), 1.3, 7.0, "ColdFill")
-	_prop(PSX + "Lighting/ceiling_lamp_1_on.glb", Vector3(0, CEIL - 0.15, 2.5), 0.0, "TableLamp")
+	# Warm pockets over each zone (reception / lounge / centre) + two hanging fixtures. Moody, not bright.
+	_light(Vector3(0, CEIL - 0.6, 1.0), Color(1.0, 0.82, 0.56), 4.5, 13.0, "CentreChandelier", true)
+	_light(Vector3(0, CEIL - 0.7, 5.5), Color(1.0, 0.78, 0.52), 4.5, 13.0, "LoungeGlow")
+	_light(Vector3(7.5, CEIL - 0.9, -2.0), Color(1.0, 0.76, 0.48), 3.8, 10.0, "ReceptionGlow")
+	_light(Vector3(0, CEIL - 0.6, -ROOM + 3.0), Color(0.66, 0.74, 1.0), 1.8, 8.0, "ElevatorCold")  # slightly cold/wrong by the lift
+	_prop(PSX + "Lighting/ceiling_lamp_4_on.glb", Vector3(0, CEIL - 0.1, 1.0), 0.0, "Chandelier1")
+	_prop(PSX + "Lighting/ceiling_lamp_4_on.glb", Vector3(0, CEIL - 0.1, 5.5), 0.0, "Chandelier2")
 
 
 func _room() -> void:
+	# Warm "old-money" palette: cream marble floor, muted gold/brown walls, dark ceiling.
 	var wall := TEX_WALL
-	var wt := Color(0.4, 0.41, 0.45)
-	_solid(Vector3(0, -0.5, 0), Vector3(ROOM * 2, 1, ROOM * 2), _mat(TEX_FLOOR, 3.0, Color(0.33, 0.34, 0.37), Vector3(ROOM * 2, 1, ROOM * 2)), "Floor")
-	_solid(Vector3(0, CEIL + 0.5, 0), Vector3(ROOM * 2, 1, ROOM * 2), _mat(wall, 2.5, Color(0.18, 0.18, 0.2), Vector3(ROOM * 2, 1, ROOM * 2)), "Ceiling")
-	_solid(Vector3(0, CEIL * 0.5, -ROOM), Vector3(ROOM * 2, CEIL, 0.6), _mat(wall, 2.5, wt, Vector3(ROOM * 2, CEIL, 0.6)), "WallN")
+	var wt := Color(0.42, 0.36, 0.3)        # muted gold-brown wall
+	_solid(Vector3(0, -0.5, 0), Vector3(ROOM * 2, 1, ROOM * 2), _mat(TEX_FLOOR, 3.0, Color(0.58, 0.53, 0.45), Vector3(ROOM * 2, 1, ROOM * 2)), "Floor")
+	_solid(Vector3(0, CEIL + 0.5, 0), Vector3(ROOM * 2, 1, ROOM * 2), _mat(wall, 2.5, Color(0.14, 0.12, 0.12), Vector3(ROOM * 2, 1, ROOM * 2)), "Ceiling")
+	# North wall has a GAP for the elevator opening (the lift is recessed BEHIND this wall, outside the room).
+	var ow := 1.5            # opening half-width
+	var oh := 2.7            # opening height
+	_solid(Vector3(-(ROOM + ow) * 0.5, CEIL * 0.5, -ROOM), Vector3(ROOM - ow, CEIL, 0.6), _mat(wall, 2.5, wt, Vector3(ROOM - ow, CEIL, 0.6)), "WallN_L")
+	_solid(Vector3((ROOM + ow) * 0.5, CEIL * 0.5, -ROOM), Vector3(ROOM - ow, CEIL, 0.6), _mat(wall, 2.5, wt, Vector3(ROOM - ow, CEIL, 0.6)), "WallN_R")
+	_solid(Vector3(0, (oh + CEIL) * 0.5, -ROOM), Vector3(ow * 2, CEIL - oh, 0.6), _mat(wall, 2.5, wt, Vector3(ow * 2, CEIL - oh, 0.6)), "WallN_Top")
 	_solid(Vector3(0, CEIL * 0.5, ROOM), Vector3(ROOM * 2, CEIL, 0.6), _mat(wall, 2.5, wt, Vector3(ROOM * 2, CEIL, 0.6)), "WallS")
 	# LEFT wall holds the mirror -> BACK_WALL_BIT so the reflection cam doesn't draw it.
 	_solid(Vector3(-ROOM, CEIL * 0.5, 0), Vector3(0.6, CEIL, ROOM * 2), _mat(wall, 2.5, wt, Vector3(0.6, CEIL, ROOM * 2)), "WallW_Mirror", BACK_WALL_BIT)
 	_solid(Vector3(ROOM, CEIL * 0.5, 0), Vector3(0.6, CEIL, ROOM * 2), _mat(wall, 2.5, wt, Vector3(0.6, CEIL, ROOM * 2)), "WallE")
-	_solid(Vector3(-5, CEIL * 0.5, -5), Vector3(0.55, CEIL, 0.55), _mat(wall, 1.5, Color(0.3, 0.31, 0.34), Vector3(0.55, CEIL, 0.55)), "Pillar1")
-	_solid(Vector3(5, CEIL * 0.5, 5), Vector3(0.55, CEIL, 0.55), _mat(wall, 1.5, Color(0.3, 0.31, 0.34), Vector3(0.55, CEIL, 0.55)), "Pillar2")
+	# A long runner carpet down the middle (real asset, scaled) + grand pillars in the corners.
+	_prop(PSX + "Large Props/carpet_mp_1.glb", Vector3(0, 0.02, 1.0), 0.0, "RunnerCarpet", 4.0)
+	var pcol := Color(0.34, 0.3, 0.26)
+	_solid(Vector3(-7, CEIL * 0.5, -7), Vector3(0.6, CEIL, 0.6), _mat(wall, 1.5, pcol, Vector3(0.6, CEIL, 0.6)), "Pillar1")
+	_solid(Vector3(7, CEIL * 0.5, -7), Vector3(0.6, CEIL, 0.6), _mat(wall, 1.5, pcol, Vector3(0.6, CEIL, 0.6)), "Pillar2")
+	_solid(Vector3(-7, CEIL * 0.5, 8), Vector3(0.6, CEIL, 0.6), _mat(wall, 1.5, pcol, Vector3(0.6, CEIL, 0.6)), "Pillar3")
+	_solid(Vector3(7, CEIL * 0.5, 8), Vector3(0.6, CEIL, 0.6), _mat(wall, 1.5, pcol, Vector3(0.6, CEIL, 0.6)), "Pillar4")
 
 
-func _props() -> void:
-	var p := Node3D.new(); p.name = "Props"; _attach(_root, p)
-	var items := [
-		[PSX + "Furniture/table_large_2.glb", Vector3(0, 0, 2.5), 0.0, "BriefingTable"],
-		[PSX + "Furniture/chair_mp_1.glb", Vector3(1.5, 0, 3.6), 200.0, "Chair1"],
-		[PSX + "Furniture/chair_mp_1.glb", Vector3(-1.5, 0, 3.6), 160.0, "Chair2"],
-		[PSX + "Furniture/chair_mp_1.glb", Vector3(0, 0, 4.2), 180.0, "Chair3"],
-		[PSX + "Furniture/shelf_mp_3.glb", Vector3(ROOM - 0.7, 0, 3.5), -90.0, "Shelf1"],
-		[PSX + "Furniture/shelf_mp_3.glb", Vector3(ROOM - 0.7, 0, 5.5), -90.0, "Shelf2"],
-		[PSX + "Furniture/display_cabinet_mp_1.glb", Vector3(ROOM - 0.7, 0, -2.0), -90.0, "Locker1"],
-		[PSX + "Furniture/display_cabinet_mp_1.glb", Vector3(ROOM - 0.7, 0, -4.0), -90.0, "Locker2"],
-		[PSX + "Large Props/wooden_crate_5.glb", Vector3(-ROOM + 1.5, 0, -3.5), 18.0, "Crate"],
-		[PSX + "Large Props/cardboard_box_1.glb", Vector3(-ROOM + 2.4, 0, -2.6), -22.0, "Box"],
-		[PSX + "Large Props/metal_barrel_mp_1.glb", Vector3(-ROOM + 1.4, 0, 5.5), 0.0, "Barrel"],
-		[TECH + "screen_etx_1_stand.glb", Vector3(ROOM - 0.8, 1.6, 0.5), -90.0, "WallScreen"],
-		[TECH + "control_panel_etx_1.glb", Vector3(-ROOM + 0.8, 0, 1.5), 90.0, "WallPanel"],
-	]
+## Drop a list of [path, pos, rot_deg, name, (scale)] real-asset props under a named group.
+func _group(group_name: String, items: Array) -> void:
+	var g := Node3D.new(); g.name = group_name; _attach(_root, g)
 	for it in items:
 		var ps := load(it[0]) as PackedScene
 		if ps == null:
-			continue
+			print("MISS ", it[0]); continue
 		var n := ps.instantiate() as Node3D
 		n.name = it[3]; n.position = it[1]; n.rotation.y = deg_to_rad(it[2])
-		p.add_child(n); n.owner = _root
+		n.scale = Vector3.ONE * (it[4] if it.size() > 4 else 1.0)
+		g.add_child(n); n.owner = _root
 
 
+func _smat(col: Color, rough: float, metal: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new(); m.albedo_color = col; m.roughness = rough; m.metallic = metal
+	return m
+
+
+## A PROPER built front desk against the east wall: a dark-wood counter with a polished marble top,
+## a brass kick-rail, and concierge clutter on top. Reads as a real hotel reception, not a table pile.
+func _reception() -> void:
+	var dx := ROOM - 1.6          # counter face a bit off the east wall
+	var top := 1.08
+	_solid(Vector3(dx, top * 0.5, -2), Vector3(1.0, top, 4.6), _smat(Color(0.26, 0.16, 0.09), 0.6, 0.0), "ReceptionBase")
+	_solid(Vector3(dx, top + 0.07, -2), Vector3(1.3, 0.14, 5.0), _smat(Color(0.6, 0.56, 0.5), 0.3, 0.15), "ReceptionTop")
+	_solid(Vector3(dx - 0.46, 0.12, -2), Vector3(0.06, 0.24, 4.6), _smat(Color(0.45, 0.36, 0.18), 0.4, 0.6), "ReceptionRail")
+	# concierge clutter ON the marble top
+	_group("ReceptionProps", [
+		[PSX + "Lighting/lamp_1_on.glb", Vector3(dx, top + 0.15, -0.2), 200.0, "DeskLamp"],
+		[PSX + "Items & Weapons/notebook_1.glb", Vector3(dx, top + 0.15, -1.6), 20.0, "Ledger"],
+		[PSX + "Small Props/open_book_mp_1.glb", Vector3(dx - 0.1, top + 0.15, -2.6), -10.0, "GuestBook"],
+		[PSX + "Items & Weapons/key_mp_1.glb", Vector3(dx + 0.15, top + 0.15, -1.0), 40.0, "Key1"],
+		[PSX + "Items & Weapons/keycard_1.glb", Vector3(dx + 0.1, top + 0.15, -3.3), 0.0, "Keycard"],
+		[PSX + "Small Props/ashtray_1.glb", Vector3(dx - 0.2, top + 0.15, -2.1), 0.0, "DeskAshtray"],
+	])
+	_light(Vector3(dx, top + 0.8, -0.2), Color(1.0, 0.74, 0.42), 1.8, 4.0, "DeskLampGlow")
+
+
+## Waiting lounge in the middle-south: a rug, sofas + chairs around a coffee table with clutter,
+## floor lamps. The open social space where friends mess with the physics toys.
+func _lounge() -> void:
+	_group("Lounge", [
+		[PSX + "Large Props/carpet_mp_1.glb", Vector3(0, 0.03, 5.5), 90.0, "LoungeRug", 3.2],
+		[PSX + "Furniture/sofa_1.glb", Vector3(0, 0, 7.3), 180.0, "Sofa1"],
+		[PSX + "Furniture/sofa_2.glb", Vector3(-3.2, 0, 5.4), 90.0, "Sofa2"],
+		[PSX + "Furniture/sofa_3.glb", Vector3(3.2, 0, 5.4), -90.0, "Sofa3"],
+		[PSX + "Furniture/coffee_table_1.glb", Vector3(0, 0, 5.4), 0.0, "CoffeeTable"],
+		[PSX + "Furniture/chair_mp_1.glb", Vector3(-2.0, 0, 8.0), 150.0, "LoungeChair1"],
+		[PSX + "Furniture/chair_mp_1.glb", Vector3(2.0, 0, 8.0), 210.0, "LoungeChair2"],
+		[PSX + "Lighting/lamp_3_1_on.glb", Vector3(-3.6, 0, 7.6), 0.0, "FloorLamp1"],
+		[PSX + "Lighting/lamp_3_1_on.glb", Vector3(3.6, 0, 7.6), 0.0, "FloorLamp2"],
+		# coffee-table clutter (decor — the throwables are spawned by lobby.gd)
+		[PSX + "Small Props/ashtray_1.glb", Vector3(0.3, 0.42, 5.4), 0.0, "LoungeAshtray"],
+		[PSX + "Items & Weapons/glass_bottle_1.glb", Vector3(-0.3, 0.42, 5.2), 0.0, "Bottle1"],
+		[PSX + "Items & Weapons/glass_bottle_1.glb", Vector3(-0.45, 0.42, 5.6), 30.0, "Bottle2"],
+		[PSX + "Small Props/book_mp_1.glb", Vector3(0.4, 0.42, 5.7), 60.0, "LoungeBook"],
+	])
+	_light(Vector3(-3.6, 1.2, 7.6), Color(1.0, 0.7, 0.4), 1.3, 3.5, "FloorLamp1Glow")
+	_light(Vector3(3.6, 1.2, 7.6), Color(1.0, 0.7, 0.4), 1.3, 3.5, "FloorLamp2Glow")
+
+
+## A little greenery in the corners — ferns as potted hotel plants.
+func _plants() -> void:
+	_group("Plants", [
+		["res://assets/nature/fern_1.glb", Vector3(-9.2, 0, -9.0), 0.0, "Fern1", 1.4],
+		["res://assets/nature/fern_2.glb", Vector3(9.2, 0, -9.0), 30.0, "Fern2", 1.4],
+		["res://assets/nature/fern_1.glb", Vector3(-9.2, 0, 9.2), 60.0, "Fern3", 1.5],
+		["res://assets/nature/fern_3.glb", Vector3(9.2, 0, 9.2), 90.0, "Fern4", 1.5],
+		["res://assets/nature/fern_2.glb", Vector3(-5.5, 0, 0.0), 0.0, "Fern5", 1.2],
+	])
+
+
+## Diegetic-ish jazz: an FM radio prop on the desk + a NON-positional AudioStreamPlayer so the music
+## is the same volume everywhere in the lobby (not affected by where you stand). The .mp3 loops.
+func _music() -> void:
+	_prop("res://assets/psx2/Props/handheld_fm_radio_etx_1.glb", Vector3(0.4, 0.45, 5.1), 200.0, "JazzRadio")
+	var a := AudioStreamPlayer.new()
+	a.name = "LobbyJazz"
+	a.stream = load("res://assets/audio/music/lobby_jazz.mp3")
+	a.volume_db = -15.0            # subtle background, even across the whole room
+	a.autoplay = true
+	_attach(_root, a)
+
+
+## Visual-only box (no collision) — for moulding/beams/doors that shouldn't block movement.
+func _vmesh(parent: Node, center: Vector3, size: Vector3, mat: StandardMaterial3D, nm: String) -> MeshInstance3D:
+	var mi := MeshInstance3D.new(); mi.name = nm
+	var bm := BoxMesh.new(); bm.size = size; mi.mesh = bm; mi.material_override = mat; mi.position = center
+	parent.add_child(mi); mi.owner = _root
+	return mi
+
+
+## Wall + ceiling richness: wainscoting + chair rail + crown on the N/S/E walls (NOT the W mirror
+## wall — its trim showed as a bar in the reflection), brass PILASTERS between bays, a coffered
+## CEILING of wood beams, and warm wall sconces. Makes it feel furnished, not a bare box.
+func _trim() -> void:
+	var wains := _smat(Color(0.22, 0.14, 0.08), 0.6, 0.0)     # dark wood dado
+	var brass := _smat(Color(0.44, 0.35, 0.18), 0.4, 0.6)     # brass moulding / pilasters
+	var beam := _smat(Color(0.2, 0.13, 0.08), 0.7, 0.0)       # ceiling beam wood
+	var R := ROOM
+	# wainscoting (low) + chair rail (mid) + crown (top) — N, S, E walls only.
+	var walls := [[Vector3(0, 0, -R), Vector3(R * 2, 0, 0.14)], [Vector3(0, 0, R), Vector3(R * 2, 0, 0.14)],
+		[Vector3(R, 0, 0), Vector3(0.14, 0, R * 2)]]
+	for w in walls:
+		_vmesh(_root, Vector3(w[0].x, 0.55, w[0].z), Vector3(maxf(w[1].x, 0.14), 1.1, maxf(w[1].z, 0.14)), wains, "Wainscot")
+		_vmesh(_root, Vector3(w[0].x, 1.18, w[0].z), Vector3(maxf(w[1].x, 0.18), 0.12, maxf(w[1].z, 0.18)), brass, "ChairRail")
+		_vmesh(_root, Vector3(w[0].x, CEIL - 0.22, w[0].z), Vector3(maxf(w[1].x, 0.2), 0.26, maxf(w[1].z, 0.2)), brass, "Crown")
+	# pilasters (vertical brass columns) between the bays — skip the elevator opening at x~0 on the N wall.
+	for x in [-7.0, -3.5, 3.5, 7.0]:
+		_vmesh(_root, Vector3(x, CEIL * 0.5, -R + 0.12), Vector3(0.34, CEIL, 0.18), brass, "PilasterN")
+	for x in [-7.0, -3.5, 0.0, 3.5, 7.0]:
+		_vmesh(_root, Vector3(x, CEIL * 0.5, R - 0.12), Vector3(0.34, CEIL, 0.18), brass, "PilasterS")
+	for z in [-7.0, -3.5, 0.0, 3.5, 7.0]:
+		_vmesh(_root, Vector3(R - 0.12, CEIL * 0.5, z), Vector3(0.18, CEIL, 0.34), brass, "PilasterE")
+	# coffered ceiling: a grid of beams just under the ceiling.
+	for x in [-7.0, -3.5, 0.0, 3.5, 7.0]:
+		_vmesh(_root, Vector3(x, CEIL - 0.18, 0), Vector3(0.3, 0.3, R * 2), beam, "BeamZ")
+	for z in [-7.0, -3.5, 3.5, 7.0]:
+		_vmesh(_root, Vector3(0, CEIL - 0.18, z), Vector3(R * 2, 0.3, 0.3), beam, "BeamX")
+	# warm wall sconces (small lamp props + a soft light each)
+	var sconces := [[Vector3(R - 0.3, 2.4, 4.0), -90.0], [Vector3(R - 0.3, 2.4, -7.0), -90.0],
+		[Vector3(-R + 0.3, 2.4, 5.0), 90.0], [Vector3(-R + 0.3, 2.4, -5.0), 90.0],
+		[Vector3(-5.0, 2.4, R - 0.3), 180.0], [Vector3(5.0, 2.4, R - 0.3), 180.0]]
+	for sc in sconces:
+		_prop(PSX + "Lighting/lamp_2_on.glb", sc[0], sc[1], "Sconce")
+		_light(sc[0] + Vector3(0, 0.1, 0), Color(1.0, 0.76, 0.46), 1.2, 3.4, "SconceGlow")
+
+
+## Framed paintings on the walls showing the downloaded art (built frame + canvas so the texture
+## override saves cleanly into the scene). Forward (canvas +Z) is oriented by `rot`.
+const ART := ["res://assets/textures/paintings/art_a.jpg", "res://assets/textures/paintings/art_b.jpg",
+	"res://assets/textures/paintings/art_c.jpg", "res://assets/textures/paintings/art_d.png",
+	"res://assets/textures/paintings/art_e.jpg"]
+
+func _painting(pos: Vector3, rot: float, tex: String, nm: String, w := 1.5, h := 1.05) -> void:
+	var g := Node3D.new(); g.name = nm; g.position = pos; g.rotation.y = deg_to_rad(rot); _attach(_root, g)
+	var frame := MeshInstance3D.new(); frame.name = "Frame"
+	var fb := BoxMesh.new(); fb.size = Vector3(w + 0.14, h + 0.14, 0.07); frame.mesh = fb
+	frame.material_override = _smat(Color(0.4, 0.32, 0.16), 0.4, 0.6); _attach(g, frame)
+	var canvas := MeshInstance3D.new(); canvas.name = "Canvas"
+	var qb := QuadMesh.new(); qb.size = Vector2(w, h)   # QuadMesh = clean 0-1 UV -> image fills/stretches to the frame
+	canvas.mesh = qb
+	canvas.position = Vector3(0, 0, 0.05)
+	var cm := StandardMaterial3D.new(); cm.albedo_texture = load(tex); cm.roughness = 0.55; cm.albedo_color = Color(0.95, 0.93, 0.9)
+	canvas.material_override = cm; _attach(g, canvas)
+
+## Physics toys as REAL editor nodes (a crowbar + two bats) on the open lounge floor — they fall and
+## settle at runtime. Editor-visible so you can move/add them in the scene.
+func _toys() -> void:
+	var g := Node3D.new(); g.name = "Toys"; _attach(_root, g)
+	for it in [["res://items/item_crowbar.tscn", Vector3(-2.0, 0.5, 3.4)],
+			["res://items/item_baseball_bat.tscn", Vector3(2.0, 0.6, 3.4)],
+			["res://items/item_baseball_bat.tscn", Vector3(0.7, 0.6, 2.6)]]:
+		var ps := load(it[0]) as PackedScene
+		if ps == null:
+			continue
+		var n := ps.instantiate()
+		n.position = it[1]
+		g.add_child(n); n.owner = _root
+
+
+func _paintings() -> void:
+	# east wall (faces -X -> rot -90), west wall (faces +X -> rot 90, avoid the mirror near z=2), south (faces -Z -> 180)
+	_painting(Vector3(ROOM - 0.34, 2.35, 1.5), -90.0, ART[0], "ArtE1")
+	_painting(Vector3(ROOM - 0.34, 2.35, -6.5), -90.0, ART[1], "ArtE2")
+	_painting(Vector3(-ROOM + 0.34, 2.35, -5.0), 90.0, ART[2], "ArtW1")
+	_painting(Vector3(-ROOM + 0.34, 2.35, 7.5), 90.0, ART[3], "ArtW2")
+	_painting(Vector3(-5.0, 2.35, ROOM - 0.34), 180.0, ART[4], "ArtS1", 1.8, 1.2)
+	_painting(Vector3(5.0, 2.35, ROOM - 0.34), 180.0, ART[0], "ArtS2", 1.8, 1.2)
+
+
+## A real brass HOTEL LIFT recessed BEHIND the north wall (outside the room), entered through the
+## wall opening. Built from clean editor-visible pieces (no model), with open doors, a control panel,
+## a warm interior light, exterior shaft rails, a sign and a low hum.
 func _elevator() -> void:
 	var g := Node3D.new(); g.name = "Elevator"; _attach(_root, g)
-	var car_z := -ROOM + 1.4
-	var half := 1.6
-	var steel := Color(0.15, 0.16, 0.19)
-	for d in [
-		[Vector3(0, CEIL * 0.5, car_z - half), Vector3(half * 2 + 0.3, CEIL, 0.2), "Back"],
-		[Vector3(-half, CEIL * 0.5, car_z), Vector3(0.2, CEIL, half * 2), "Left"],
-		[Vector3(half, CEIL * 0.5, car_z), Vector3(0.2, CEIL, half * 2), "Right"],
-		[Vector3(0, CEIL - 0.1, car_z), Vector3(half * 2, 0.2, half * 2), "Roof"],
-		[Vector3(0, CEIL - 0.45, car_z + half), Vector3(half * 2 + 0.3, 0.9, 0.18), "Lintel"],
-	]:
-		_elev_solid(g, d[0], d[1], steel, d[2])
-	var ps := load(PSX + "Modular Structures/elevator_1.glb") as PackedScene
-	if ps != null:
-		var n := ps.instantiate() as Node3D
-		n.name = "ElevCar"; n.position = Vector3(0, 0, car_z - half + 0.2)
-		g.add_child(n); n.owner = _root
+	var zf := float(-ROOM)         # opening plane (the north wall)
+	var depth := 2.6
+	var zc := zf - depth * 0.5     # car centre, OUTSIDE the room
+	var hw := 1.5                  # matches the wall opening half-width
+	var ht := 2.7
+	var brass := Color(0.5, 0.42, 0.26)
+	var dark := Color(0.16, 0.14, 0.11)
+	# Car shell (recessed beyond the wall).
+	_elev_solid(g, Vector3(0, ht * 0.5, zf - depth), Vector3(hw * 2, ht, 0.15), brass, "Back")
+	_elev_solid(g, Vector3(-hw, ht * 0.5, zc), Vector3(0.15, ht, depth), brass, "Left")
+	_elev_solid(g, Vector3(hw, ht * 0.5, zc), Vector3(0.15, ht, depth), brass, "Right")
+	_elev_solid(g, Vector3(0, ht, zc), Vector3(hw * 2, 0.15, depth), brass, "Ceil")
+	_elev_solid(g, Vector3(0, -0.04, zc), Vector3(hw * 2, 0.08, depth), Color(0.22, 0.19, 0.16), "CarFloor")
+	# Brass door frame around the opening + two OPEN doors slid to the sides.
+	_elev_solid(g, Vector3(0, ht + 0.12, zf), Vector3(hw * 2 + 0.5, 0.32, 0.28), brass, "Lintel")
+	_elev_solid(g, Vector3(-hw - 0.18, ht * 0.5, zf), Vector3(0.28, ht, 0.28), brass, "JambL")
+	_elev_solid(g, Vector3(hw + 0.18, ht * 0.5, zf), Vector3(0.28, ht, 0.28), brass, "JambR")
+	# Doors are VISUAL ONLY (no collision) so they never block the entrance; they slide shut on descend.
+	var dmat := _smat(Color(0.55, 0.47, 0.3), 0.35, 0.5)
+	_vmesh(g, Vector3(-hw + 0.38, ht * 0.5, zf - 0.16), Vector3(0.72, ht - 0.1, 0.08), dmat, "DoorL")
+	_vmesh(g, Vector3(hw - 0.38, ht * 0.5, zf - 0.16), Vector3(0.72, ht - 0.1, 0.08), dmat, "DoorR")
+	# Exterior shaft rails (so it reads as an external lift attached to the building).
+	_elev_solid(g, Vector3(-hw - 0.35, CEIL * 0.6, zf - 0.2), Vector3(0.16, CEIL * 1.2, 0.16), dark, "RailL")
+	_elev_solid(g, Vector3(hw + 0.35, CEIL * 0.6, zf - 0.2), Vector3(0.16, CEIL * 1.2, 0.16), dark, "RailR")
+	# Control panel inside (right wall) + a diegetic call button.
+	_elev_solid(g, Vector3(hw - 0.12, 1.2, zc + 0.35), Vector3(0.06, 0.55, 0.32), dark, "PanelPlate")
 	var cb := load(PSX + "Electronics & Misc/elevator_call_button_1.glb") as PackedScene
 	if cb != null:
 		var b := cb.instantiate() as Node3D
-		b.name = "CallButton"; b.position = Vector3(half - 0.15, 1.2, car_z + half - 0.2)
+		b.name = "CallButton"; b.position = Vector3(hw - 0.17, 1.2, zc + 0.35); b.rotation.y = deg_to_rad(-90)
 		g.add_child(b); b.owner = _root
-	var glow := OmniLight3D.new()
-	glow.name = "ElevGlow"; glow.position = Vector3(0, CEIL - 0.6, car_z)
-	glow.light_color = Color(1.0, 0.78, 0.45); glow.light_energy = 1.9; glow.omni_range = 4.5
-	g.add_child(glow); glow.owner = _root
-	# Start zone marker (lobby.gd reads its position to know where "in the elevator" is).
-	var m := Marker3D.new(); m.name = "StartZone"; m.position = Vector3(0, 0, car_z)
+	# Warm interior light + exterior sign.
+	var l := OmniLight3D.new()
+	l.name = "ElevLight"; l.position = Vector3(0, ht - 0.25, zc)
+	l.light_color = Color(1.0, 0.82, 0.5); l.light_energy = 2.8; l.omni_range = 4.0; l.shadow_enabled = true
+	g.add_child(l); l.owner = _root
+	var sign := load(PSX + "Electronics & Misc/elevator_sign_1.glb") as PackedScene
+	if sign != null:
+		var s := sign.instantiate() as Node3D
+		s.name = "ElevSign"; s.position = Vector3(0, ht + 0.45, zf + 0.12)
+		g.add_child(s); s.owner = _root
+	# Low mechanical hum from the shaft (subtle).
+	var hum := AudioStreamPlayer3D.new()
+	hum.name = "ElevHum"; hum.position = Vector3(0, 1.0, zc)
+	hum.stream = load("res://assets/audio/sfx/machine_mx_1_loop.ogg")
+	hum.volume_db = -26.0; hum.unit_size = 4.0; hum.autoplay = true
+	g.add_child(hum); hum.owner = _root
+	# Start zone (lobby.gd reads this to know where "in the lift" is) — just inside the doors.
+	var m := Marker3D.new(); m.name = "StartZone"; m.position = Vector3(0, 0, zf - 0.6)
 	g.add_child(m); m.owner = _root
 
 
@@ -216,4 +407,4 @@ func _mirror() -> void:
 
 
 func _markers() -> void:
-	var s := Marker3D.new(); s.name = "PlayerSpawn"; s.position = Vector3(0, 0.4, 4.5); _attach(_root, s)
+	var s := Marker3D.new(); s.name = "PlayerSpawn"; s.position = Vector3(0, 0.4, 1.5); _attach(_root, s)

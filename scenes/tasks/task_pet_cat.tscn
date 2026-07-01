@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://b5petcat00001"]
+
+[ext_resource type="Script" path="res://scripts/tasks/task_pet_cat.gd" id="1"]
+
+[node name="PetCatTask" type="Node3D"]
+script = ExtResource("1")
+task_title = "Pet the bunker cat"

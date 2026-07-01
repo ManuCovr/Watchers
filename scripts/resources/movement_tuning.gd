@@ -19,7 +19,7 @@ extends Resource
 @export var sprint_multiplier := 1.7       ## walk_speed * this while bursting
 @export var sprint_max_time := 2.2         ## seconds of burst available when full
 @export var sprint_recharge := 0.6         ## burst seconds regained per real second (when not sprinting)
-@export var sprint_min_to_start := 0.35    ## must have at least this much burst to kick off a sprint
+@export var sprint_min_to_start := 0.55    ## spent the burst? must recharge to at least this (≈1s lockout) before you can sprint again
 @export var sprint_fov_add := 8.0          ## FOV widens while sprinting → you cover *worse* (tradeoff)
 
 @export_group("Look")

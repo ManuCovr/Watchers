@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://hvn73idktpi8"
-path="res://.godot/imported/display_cabinet_mp_1_2_wood_4.png-e60b1055ae38cb3c65a780696625a2c6.ctex"
+path.s3tc="res://.godot/imported/display_cabinet_mp_1_2_wood_4.png-e60b1055ae38cb3c65a780696625a2c6.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e5d8d1fc4a75ca0f5e34ee6b47c9461b"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx/Furniture/display_cabinet_mp_1_2_wood_4.png"
-dest_files=["res://.godot/imported/display_cabinet_mp_1_2_wood_4.png-e60b1055ae38cb3c65a780696625a2c6.ctex"]
+dest_files=["res://.godot/imported/display_cabinet_mp_1_2_wood_4.png-e60b1055ae38cb3c65a780696625a2c6.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

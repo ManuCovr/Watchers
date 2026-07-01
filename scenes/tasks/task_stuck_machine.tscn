@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://b4stuckmch001"]
+
+[ext_resource type="Script" path="res://scripts/tasks/task_stuck_machine.gd" id="1"]
+
+[node name="StuckMachineTask" type="Node3D"]
+script = ExtResource("1")
+task_title = "Whack the jammed machine"

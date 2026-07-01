@@ -1,0 +1,31 @@
+[gd_scene format=3 uid="uid://x4ipj37b5i81"]
+
+[ext_resource type="Script" uid="uid://dq4eyg3auydt4" path="res://scripts/items/physics_item.gd" id="1_phys"]
+
+[node name="ItemBaseballBat" type="RigidBody3D" unique_id=623656025]
+script = ExtResource("1_phys")
+item_name = "bat"
+model_path = "res://assets/psx2/Weapons & Tools/baseball_bat_mx_1.glb"
+model_scale = 1.0
+collider_pad = 1.6
+item_mass = 1.8
+hold_position_offset = Vector3(0.34, -0.34, 0)
+hold_rotation_degrees = Vector3(10, 90, 70)
+hold_distance = 0.74
+two_handed = true
+throw_min_force = 5.0
+can_swing = true
+swing_axis = Vector3(0.18, 1, 0.05)
+swing_angle_degrees = 170.0
+swing_windup_back = 0.45
+swing_pivot_offset = Vector3(0, -0.05, 0.03)
+windup_time = 0.18
+active_time = 0.24
+recovery_time = 0.28
+swing_cooldown = 0.65
+swing_knockback = 2.0
+swing_up = 0.6
+impact_knockback = 3.0
+swing_sound = "res://assets/audio/sfx/footstep_wood_a_6.ogg"
+impact_sound = "res://assets/audio/sfx/bonk_freesound.mp3"
+impact_sound_offset = 0.2

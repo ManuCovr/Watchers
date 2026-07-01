@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://be0y7fnsh0jgc"]
+
+[ext_resource type="Script" uid="uid://dqsqnf0gbrt26" path="res://scripts/player/detached_hands_controller.gd" id="1"]
+
+[node name="DetachedHandsPair" type="Node3D" unique_id=759708903]
+script = ExtResource("1")
+follow_speed = 30.0
+fp_right_offset = Vector3(0.44, -0.26, -0.4)
+fp_left_offset = Vector3(-0.44, -0.26, -0.4)
+fp_rest_pitch_deg = -180.0
+fp_rest_spin_deg = -90.0
+fp_rest_lean_deg = 7.0

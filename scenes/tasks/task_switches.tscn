@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://ckjrpywrgq6nt"]
 
-[ext_resource type="Script" path="res://scripts/tasks/task_switches.gd" id="1"]
+[ext_resource type="Script" uid="uid://bpsmcvse5wk2v" path="res://scripts/tasks/task_switches.gd" id="1"]
 
-[node name="SwitchSequenceTask" type="Node3D"]
+[node name="SwitchSequenceTask" type="Node3D" unique_id=195243743]
 script = ExtResource("1")
+task_title = "Throw the breakers in order"

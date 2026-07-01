@@ -22,6 +22,9 @@ var _carrier: WPlayer
 func _build() -> void:
 	if is_default_title():
 		task_title = "Carry the cylinder to the loading plate"
+	task_category = &"carry"
+	difficulty = 2
+	estimated_duration = 12.0
 	# A real gas cylinder you lug around (not a block).
 	_obj = make_model("res://assets/psx2/Props/gas_cylinder_mx_1.glb",
 		Vector3(0.6, 1.0, 0.6), Color(0.62, 0.6, 0.66))

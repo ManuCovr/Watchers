@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+; Base recoverable physics object. RecoveryManager instances this and sets model_path / category /
+; display_name / mass per spawn BEFORE adding it to the tree (so PhysicsItem._build_visual picks them
+; up in _ready). Authored placement in a level can also just drop this scene and tune it in-Inspector.
+
+[ext_resource type="Script" path="res://scripts/objectives/recoverable_object.gd" id="1_rec"]
+
+[node name="RecoverableObject" type="RigidBody3D"]
+script = ExtResource("1_rec")
+item_name = "goods"
+model_scale = 1.0
+item_mass = 1.0

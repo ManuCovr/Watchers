@@ -20,6 +20,9 @@ var _cranking := false
 func _build() -> void:
 	if is_default_title():
 		task_title = "Crank the relay (hold E)"
+	task_category = &"physical"
+	difficulty = 2
+	estimated_duration = 6.0
 	# A real fuel-drum generator base (not a block); the crank wheel sits on top.
 	var housing := make_model("res://assets/fpskit/metal_barrel_fps_2.glb",
 		Vector3(1.2, 1.4, 0.6), Color(0.1, 0.1, 0.12))

@@ -15,11 +15,13 @@ extends Interactable
 @export var model_euler := Vector3(90, 0, 0)
 @export var model_lift := 0.45                 ## float the item off the ground so it's visible
 @export var spin_speed := 1.1                  ## slow idle spin (rad/s) — classic "pickup" tell
-@export var glow := Color(0.7, 0.85, 1.0)     ## a faint findable glow (keep it dim/diegetic)
-@export var glow_energy := 0.6
+@export var outline_color := Color(0.92, 0.82, 0.48)  ## dirty gold, matches PhysicsItem's targeting outline
 
 var _pivot: Node3D
 var _model: Node3D
+var _owned_mats: Array = []          # duplicated materials we own, to add/remove the outline pass
+var _outline_mat: ShaderMaterial
+var _outlined := false
 
 
 func _ready() -> void:
@@ -29,14 +31,6 @@ func _ready() -> void:
 	# aim-ray sails over it and nothing is pickable. Tall + a bit wide so it's easy to look at.
 	add_box(Vector3(0.9, 1.3, 0.9), Vector3(0, model_lift + 0.2, 0))
 	_rebuild_preview()
-	# A small glow so a dropped item is findable in the dark (especially under an outage).
-	var lamp := OmniLight3D.new()
-	lamp.name = "FindGlow"
-	lamp.light_color = glow
-	lamp.light_energy = glow_energy
-	lamp.omni_range = 1.6
-	lamp.position = Vector3(0, 0.2, 0)
-	add_child(lamp)
 	if Engine.is_editor_hint():
 		return
 	add_to_group("pickups")
@@ -70,6 +64,52 @@ func _rebuild_preview() -> void:
 	_model.rotation_degrees = model_euler
 	_pivot.add_child(_model)
 	# Do NOT set owner — the preview is ephemeral (rebuilt on load), never saved into the scene.
+	if not Engine.is_editor_hint():
+		_setup_outline()
+
+
+## Own the model's materials so we can toggle an inverted-hull OUTLINE pass when the player aims at
+## the item — same readable gold silhouette as PhysicsItem. No constant glow light; you find items by
+## their shape, and looking at one outlines it (consistent "look = outline" language across all items).
+func _setup_outline() -> void:
+	_owned_mats.clear()
+	_outline_mat = null
+	_outlined = false
+	if _model == null:
+		return
+	var center := Vector3.ZERO
+	for mi in _model.find_children("*", "MeshInstance3D", true, false):
+		var inst := mi as MeshInstance3D
+		if inst.mesh == null:
+			continue
+		center = inst.mesh.get_aabb().get_center()
+		for i in inst.mesh.get_surface_count():
+			var src := inst.get_active_material(i)
+			if src == null:
+				continue
+			var owned := src.duplicate() as Material
+			inst.set_surface_override_material(i, owned)
+			_owned_mats.append(owned)
+	var sh := load("res://materials/player/player_outline.gdshader") as Shader
+	if sh != null:
+		_outline_mat = ShaderMaterial.new()
+		_outline_mat.shader = sh
+		_outline_mat.set_shader_parameter("outline_color", outline_color)
+		_outline_mat.set_shader_parameter("thickness", 0.02)
+		_outline_mat.set_shader_parameter("model_center", center)
+
+
+func _set_outline(on: bool) -> void:
+	if _outline_mat == null or on == _outlined:
+		return
+	_outlined = on
+	for m in _owned_mats:
+		(m as Material).next_pass = _outline_mat if on else null
+
+
+## Override the base hover (which lit a glow light) — pickups OUTLINE on aim instead of glowing.
+func look_hover(on: bool) -> void:
+	_set_outline(on)
 
 
 func _process(delta: float) -> void:

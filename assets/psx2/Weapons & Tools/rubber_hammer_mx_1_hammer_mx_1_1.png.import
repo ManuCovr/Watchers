@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cl51suo7mfj42"
-path="res://.godot/imported/rubber_hammer_mx_1_hammer_mx_1_1.png-fddf7a6538cffde0e9505920215e19e9.ctex"
+path.s3tc="res://.godot/imported/rubber_hammer_mx_1_hammer_mx_1_1.png-fddf7a6538cffde0e9505920215e19e9.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "e96f06ab669e95a769e195341e621a36"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx2/Weapons & Tools/rubber_hammer_mx_1_hammer_mx_1_1.png"
-dest_files=["res://.godot/imported/rubber_hammer_mx_1_hammer_mx_1_1.png-fddf7a6538cffde0e9505920215e19e9.ctex"]
+dest_files=["res://.godot/imported/rubber_hammer_mx_1_hammer_mx_1_1.png-fddf7a6538cffde0e9505920215e19e9.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dofaciak7ab6t"
-path="res://.godot/imported/ceiling_fan_mp_1_1_light_on_plastic_mp_3.png-4c214145e308a86f37b031821bd7d8a9.ctex"
+path.s3tc="res://.godot/imported/ceiling_fan_mp_1_1_light_on_plastic_mp_3.png-4c214145e308a86f37b031821bd7d8a9.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "ec35f19152d57ae11b28c7e0e847dbd7"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx/Electronics & Misc/ceiling_fan_mp_1_1_light_on_plastic_mp_3.png"
-dest_files=["res://.godot/imported/ceiling_fan_mp_1_1_light_on_plastic_mp_3.png-4c214145e308a86f37b031821bd7d8a9.ctex"]
+dest_files=["res://.godot/imported/ceiling_fan_mp_1_1_light_on_plastic_mp_3.png-4c214145e308a86f37b031821bd7d8a9.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

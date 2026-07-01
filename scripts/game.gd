@@ -13,6 +13,7 @@ extends Node3D
 const PLAYER_SCENE := preload("res://scenes/entities/player.tscn")
 const WATCHER_SCENE := preload("res://scenes/entities/watcher.tscn")
 const PAUSE_MENU_SCENE := preload("res://scenes/ui/pause_menu.tscn")
+const HORROR_TEXT_SCENE := preload("res://scenes/ui/horror_text_overlay.tscn")
 const RELAY_TASK := preload("res://scenes/tasks/task_relay.tscn")
 const CARRY_TASK := preload("res://scenes/tasks/task_carry.tscn")
 const SWITCH_TASK := preload("res://scenes/tasks/task_switches.tscn")
@@ -35,6 +36,48 @@ const MAIN_MENU_PATH := "res://scenes/main_menu.tscn"
 @export var heart_min_pitch := 0.85
 @export var heart_max_pitch := 1.5
 
+## ---- Task pool / round selection --------------------------------------------
+## The bunker AUTHORS a large pool of tasks; each round only a varied SUBSET is activated, so no two
+## runs feel the same and players don't memorise one route. Selection is authority-computed, then
+## broadcast to clients for display (the win tally is already authority-driven via Task signals, so
+## selection can never cause a wrong win). All knobs exposed for tuning.
+@export_group("Task pool / round selection")
+@export var enable_task_selection := true
+@export_range(1, 20) var required_solo := 6          ## tasks to win, solo
+@export_range(0, 6) var required_per_extra_player := 2  ## +N per extra player
+@export_range(1, 30) var required_max := 14
+@export_range(1, 6) var max_same_type_per_round := 3 ## don't flood a round with one task type
+@export var min_distance_between_selected := 7.0     ## spread picks across the map (relaxed if needed)
+@export var allow_hard_in_solo := true
+@export var allow_coop_tasks := true
+@export_range(0, 3) var max_coop_tasks_per_round := 1
+@export_range(0.0, 1.0, 0.05) var meme_task_rarity := 0.5  ## chance a round includes ONE meme task
+@export var weight_easy := 0.35
+@export var weight_medium := 0.35
+@export var weight_hard := 0.20
+
+## ---- Recovery / restock (Phase 1) -------------------------------------------
+## The new core loop: instead of selecting minigame tasks, the round requires the team to RECOVER
+## physical objects from the bunker and RESTOCK them into the elevator. When on, all authored tasks
+## are left inactive (set-dressing) and RecoveryManager drives the win. See recovery_manager.gd.
+@export_group("Recovery / restock (Phase 1)")
+@export var enable_recovery_mode := true
+@export_range(0, 12) var recovery_food := 3
+@export_range(0, 12) var recovery_drinks := 2
+@export_range(0, 12) var recovery_electronics := 1
+@export_range(0, 4) var recovery_per_extra_player := 0   ## +N to each quota per extra player
+
+## ---- Player-vs-player sprint bumps (co-op chaos; inert in solo) --------------
+@export_group("Player bumps")
+@export var bump_radius := 1.3                ## how close two players must be to bump
+@export var bump_min_rel_speed := 5.0         ## relative speed needed (≈ one sprinting into another)
+@export var bump_force := 4.0                 ## knockback shove magnitude (clamped, never lethal)
+@export var bump_stagger := 0.9               ## ~1s slowdown after a bump (reuses player _stagger)
+@export var bump_cooldown := 1.2              ## a given pair can't re-bump for this long
+
+var _bump_last_pos := {}                      # WPlayer -> last position (for velocity estimate)
+var _bump_cd := {}                            # pair key -> cooldown remaining
+
 var house: Node3D
 var watchers: Array[Watcher] = []
 var tasks: Array[Task] = []
@@ -44,12 +87,16 @@ var _cached_local: WPlayer
 var _state := "play"            # play | won | caught
 var _paused := false
 var _vmat: ShaderMaterial
+var _hud: GameHUD
 var _hud_center: Label
+var _recovery: RecoveryManager
 var _danger := 0.0
 var _pulse_t := 0.0
 var _heart: AudioStreamPlayer
 var _ambient: AudioStreamPlayer
 var _pause_menu: CanvasLayer
+var _horror: HorrorTextOverlay
+var _was_downed := false        # local player downed-edge, for the DOWN panic flash
 
 
 func _ready() -> void:
@@ -59,14 +106,18 @@ func _ready() -> void:
 		config = GameConfig.new()
 	WPlayer.input_blocked = false     # clear any leftover pause-block from the lobby/menu
 	VoiceManager.lobby_mode = false   # gameplay voice = tighter / more tactical
+	PhysicsItem.lobby_mode = false    # gameplay items still knock back (prank tools), see physics_item
 	_build_house()                    # the authored bunker (env + rooms + tasks live inside it)
 	_build_environment()              # only if the bunker scene didn't author one
 	_build_player()
 	_collect_tasks()                  # tasks are authored in bunker.tscn -> just wire them up
+	_build_recovery()                 # Phase 1: recovery/restock objective (deactivates tasks when on)
+	_build_room_atmosphere()          # per-room colour + hum identity (derived from task zones)
 	_build_watchers()
 	_build_power()                    # power-outage events + the glowing red reset button
 	_build_psx_post()                 # full-screen PSX dither/colour-reduction look
 	_build_hud()
+	_build_horror_text()              # short PANIC text (RUN / WATCH / DOWN) — separate from HUD
 	_build_audio()
 	_build_pause_menu()
 
@@ -92,7 +143,6 @@ func _build_power() -> void:
 var _outage_label: Label
 var _outage_tint: ColorRect
 var _outage_flash := 0.0
-var _pickup_label: Label
 
 ## Tell the players, loud and clear, when the lights die (and when they come back).
 func _announce_outage(on: bool) -> void:
@@ -100,7 +150,10 @@ func _announce_outage(on: bool) -> void:
 		return
 	_outage_label.visible = true
 	if on:
-		_outage_label.text = "⚠  POWER FAILURE  ⚠\nfind the red button — restore power"
+		# Drama goes to the wordless PANIC flash; the banner stays a terse gameplay hint (where to go).
+		if _horror != null:
+			_horror.flash("RUN", HorrorTextOverlay.DANGER, 1.4)
+		_outage_label.text = "power down — slam the red button"
 		_outage_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.15))
 		_outage_flash = 1.0
 		if not AudioGen.is_headless():
@@ -109,7 +162,9 @@ func _announce_outage(on: bool) -> void:
 			a.volume_db = -2.0; a.pitch_scale = 0.6
 			add_child(a); a.play(); a.finished.connect(a.queue_free)
 	else:
-		_outage_label.text = "POWER RESTORED"
+		if _horror != null:
+			_horror.flash("MOVE", HorrorTextOverlay.SICK, 1.1)
+		_outage_label.text = "power restored"
 		_outage_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.45))
 		_outage_flash = 0.0
 		_outage_tint.color.a = 0.0
@@ -186,7 +241,6 @@ func _build_player() -> void:
 		p.position = _marker("PlayerSpawn", Vector3(0, 0.4, 26))
 		_apply_player_config(p)
 		_players_node.add_child(p)
-		p.phone_thrown.connect(_spawn_thrown_phone)
 		p.picked_up.connect(_on_picked_up)
 		return
 
@@ -209,30 +263,24 @@ func _spawn_player(data: Variant) -> Node:
 	p.name = str(data)
 	p.position = _marker("PlayerSpawn", Vector3(0, 0.4, 26))
 	_apply_player_config(p)
-	p.phone_thrown.connect(_spawn_thrown_phone)
 	p.picked_up.connect(_on_picked_up)
 	return p
 
 
 const PICKUP_HINTS := {
-	"flashlight": "FLASHLIGHT\npress G to toggle the torch",
-	"phone": "CELLPHONE\npress V to throw it and stun the watcher",
-	"keycard": "KEYCARD\nuse it on a locked blast door's keypad",
-	"cigs": "CIGARETTES\npress C to light one up",
-	"battery": "BATTERY\nflashlight recharged",
+	"flashlight": "Picked up FLASHLIGHT  ·  press G to toggle",
+	"phone": "Picked up CELLPHONE  ·  press V to flash-stun the Watcher",
+	"keycard": "Picked up KEYCARD  ·  opens locked blast doors",
+	"cigs": "Picked up CIGARETTES  ·  press C to light one",
+	"battery": "Picked up BATTERY  ·  torch + phone flashes recharged",
 }
 
-## Big center message when you pick something up: WHAT it is + HOW to use it. Fades after a beat.
+## A small bottom-left toast when you pick something up: WHAT it is + HOW to use it. Routed through
+## the HUD so it shares the gold palette + font with the rest of the interface (no big centred banner).
 func _on_picked_up(kind: String) -> void:
-	if _pickup_label == null:
+	if _hud == null or not is_instance_valid(_hud):
 		return
-	_pickup_label.text = "PICKED UP — " + String(PICKUP_HINTS.get(kind, kind.to_upper()))
-	_pickup_label.visible = true
-	_pickup_label.modulate.a = 1.0
-	var t := create_tween()
-	t.tween_interval(2.2)
-	t.tween_property(_pickup_label, "modulate:a", 0.0, 1.0)
-	t.tween_callback(func(): if is_instance_valid(_pickup_label): _pickup_label.visible = false)
+	_hud.toast(String(PICKUP_HINTS.get(kind, "Picked up " + kind.to_upper())))
 
 
 ## Push the editor-tunable GameConfig numbers onto a freshly-spawned player (flashlight battery,
@@ -246,13 +294,6 @@ func _apply_player_config(p: WPlayer) -> void:
 	p.cig_calm_time = config.cig_calm_time
 	p.cig_stamina_restore = config.cig_stamina_restore
 	p.capacitor_carry_slow = config.capacitor_carry_slow
-
-
-## A player threw their phone — fling a stun projectile from their aim.
-func _spawn_thrown_phone(origin: Vector3, dir: Vector3) -> void:
-	var tp := ThrownPhone.new()
-	add_child(tp)
-	tp.launch(origin, dir)
 
 
 ## The player THIS peer controls (or the solo player). Cached once found.
@@ -279,6 +320,179 @@ func _collect_tasks() -> void:
 			t.completed.connect(_on_task_completed)
 			t.progress_changed.connect(_on_task_progress)
 		tasks.append(t)
+	# Recovery mode: the round win is RESTOCK, not minigame tasks. Deactivate AND HIDE every authored
+	# task so the old minigame props don't clutter the bunker (the user decorates it themselves). Nothing
+	# is deleted — the nodes still exist for later phases; they're just invisible + inert this round.
+	if enable_recovery_mode:
+		for t in tasks:
+			t.set_active(false)
+			t.visible = false
+		return
+	_select_round_tasks()
+	# A client may have received the selection broadcast before its tasks existed — apply now.
+	if not Net.is_authority() and _pending_selection.size() > 0:
+		_apply_selection(_pending_selection)
+
+
+# ---- Recovery / restock (Phase 1) -------------------------------------------
+## Stand up the RecoveryManager: it spawns the round's recoverable objects (anchored to task
+## positions), builds the elevator loading bay, and tallies per-category restock quotas. Runs on every
+## peer (objects must exist identically); only the authority validates deliveries + fires the win.
+func _build_recovery() -> void:
+	if not enable_recovery_mode:
+		return
+	_recovery = RecoveryManager.new()
+	_recovery.name = "RecoveryManager"
+	_recovery.required_food = recovery_food
+	_recovery.required_drinks = recovery_drinks
+	_recovery.required_electronics = recovery_electronics
+	_recovery.per_extra_player = recovery_per_extra_player
+	add_child(_recovery)
+	var pc := maxi(1, get_tree().get_nodes_in_group("players").size())
+	_recovery.setup(house, pc)
+	_recovery.objective_complete.connect(_on_objective_complete)   # callout, then the win
+	_recovery.delivered_item.connect(_on_recovery_delivered)
+
+
+## Local restock confirmation — a small bottom-left toast PLUS the punchy CRT "+ FOOD" value pop.
+func _on_recovery_delivered(_category: String, display_name: String) -> void:
+	if _hud != null and is_instance_valid(_hud):
+		_hud.toast("RESTOCKED — " + display_name)
+		_hud.delivery_pop(_category)
+
+
+## All quotas met — big "ELEVATOR LOADED" callout, then resolve the win.
+func _on_objective_complete() -> void:
+	if _hud != null and is_instance_valid(_hud):
+		_hud.callout("ELEVATOR LOADED")
+	_win()
+
+
+# ---- Round selection --------------------------------------------------------
+## Pick a varied subset of the authored pool for THIS round. Authority only; clients receive the
+## result via _net_apply_selection. Mixes difficulty (easy/medium/hard weights), caps how many of
+## one type appear, spreads picks across the map, gates co-op tasks to enough players, and includes
+## at most one (rare) meme task.
+var _pending_selection := PackedStringArray()
+
+func _select_round_tasks() -> void:
+	if not enable_task_selection or tasks.is_empty():
+		return
+	if not Net.is_authority():
+		return                              # clients wait for the broadcast
+	var players := maxi(1, get_tree().get_nodes_in_group("players").size())
+
+	var memes: Array[Task] = []
+	var coops: Array[Task] = []
+	var normals: Array[Task] = []
+	for t in tasks:
+		if t.min_players_required > players:
+			continue
+		if t.requires_two_players and (not allow_coop_tasks or players < 2):
+			continue
+		if t.difficulty == 3 and not allow_hard_in_solo and players == 1:
+			continue
+		if t.meme_task:
+			memes.append(t)
+		elif t.requires_two_players:
+			coops.append(t)
+		else:
+			normals.append(t)
+	memes.shuffle()
+	coops.shuffle()
+
+	var eligible_n := memes.size() + coops.size() + normals.size()
+	var target := clampi(required_solo + (players - 1) * required_per_extra_player, 1, required_max)
+	target = mini(target, eligible_n)
+
+	var selected: Array[Task] = []
+	var type_counts := {}
+
+	# One rare meme task (keeps it funny, not spammy).
+	if not memes.is_empty() and randf() < meme_task_rarity:
+		_try_select(memes[0], selected, type_counts)
+	# Co-op up to the cap (already gated to player count above).
+	var coop_added := 0
+	for t in coops:
+		if coop_added >= max_coop_tasks_per_round or selected.size() >= target:
+			break
+		if _try_select(t, selected, type_counts):
+			coop_added += 1
+	# Fill the rest from normals, biased by the difficulty weights.
+	for t in _weight_order(normals, players):
+		if selected.size() >= target:
+			break
+		_try_select(t, selected, type_counts)
+	# If type-cap / spacing left us short, relax both and top up so a round is never too thin.
+	if selected.size() < target:
+		for t in normals + coops + memes:
+			if selected.size() >= target:
+				break
+			if not selected.has(t):
+				selected.append(t)
+
+	var names := PackedStringArray()
+	for t in selected:
+		names.append(String(t.name))
+	if Net.is_active():
+		_net_apply_selection.rpc(names)     # call_local also applies on the host
+	else:
+		_apply_selection(names)
+
+
+## Add `t` to the round unless it'd exceed the per-type cap or sit too close to an existing pick.
+func _try_select(t: Task, selected: Array[Task], type_counts: Dictionary) -> bool:
+	var key: Script = t.get_script()
+	if int(type_counts.get(key, 0)) >= max_same_type_per_round:
+		return false
+	for s in selected:
+		if s.global_position.distance_to(t.global_position) < min_distance_between_selected:
+			return false
+	selected.append(t)
+	type_counts[key] = int(type_counts.get(key, 0)) + 1
+	return true
+
+
+## Weighted shuffle: each task's sort key is biased by its difficulty weight, so easy/medium/hard
+## appear roughly in the configured proportions while still randomising round-to-round.
+func _weight_order(arr: Array[Task], _players: int) -> Array[Task]:
+	var scored: Array = []
+	for t in arr:
+		var w := weight_medium
+		if t.difficulty == 1:
+			w = weight_easy
+		elif t.difficulty == 3:
+			w = weight_hard
+		scored.append({"t": t, "k": pow(randf(), 1.0 / maxf(0.01, w))})
+	scored.sort_custom(func(a, b): return a["k"] > b["k"])
+	var out: Array[Task] = []
+	for e in scored:
+		out.append(e["t"])
+	return out
+
+
+func _apply_selection(names: PackedStringArray) -> void:
+	var want := {}
+	for n in names:
+		want[n] = true
+	for t in tasks:
+		t.set_active(want.has(String(t.name)))
+
+
+@rpc("authority", "call_local", "reliable")
+func _net_apply_selection(names: PackedStringArray) -> void:
+	_pending_selection = names
+	if not tasks.is_empty():
+		_apply_selection(names)
+
+
+## Give each functional room a signature colour + hum so players read the facility by feel (no signs).
+## Derives room centres from the tasks already placed there — see room_atmosphere.gd.
+func _build_room_atmosphere() -> void:
+	var ra := RoomAtmosphere.new()
+	ra.name = "RoomAtmosphere"
+	add_child(ra)
+	ra.build(tasks, house)
 
 
 func _build_watchers() -> void:
@@ -337,6 +551,16 @@ func _build_pause_menu() -> void:
 	_pause_menu.resume_requested.connect(func(): _set_paused(false))
 
 
+## The panic-text overlay (its own CanvasLayer above the PSX post). First bunker entry gets a single
+## wordless tell — WATCH — so players immediately understand the verb without a tutorial line.
+func _build_horror_text() -> void:
+	_horror = HORROR_TEXT_SCENE.instantiate()
+	add_child(_horror)
+	get_tree().create_timer(1.8).timeout.connect(func():
+		if is_instance_valid(_horror):
+			_horror.flash("WATCH", HorrorTextOverlay.IVORY, 1.8))
+
+
 ## Full-screen PSX colour-reduction/dither pass (reusable PSXPost node), below the pause menu so the
 ## game + HUD get the retro look but the pause UI stays crisp.
 func _build_psx_post() -> void:
@@ -368,21 +592,37 @@ void fragment() {
 	vignette.material = _vmat
 	layer.add_child(vignette)
 
-	# Crosshair
-	var dot := ColorRect.new()
-	dot.color = Color(1, 1, 1, 0.55)
-	dot.size = Vector2(4, 4)
-	dot.set_anchors_preset(Control.PRESET_CENTER)
-	dot.position = Vector2(-2, -2)
-	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(dot)
+	# ---- HUD rendered into a SubViewport, shown through the CRT curve shader (world stays crisp) ----
+	# Rendered at HUD_RENDER_SCALE of the window so the TextureRect upscales it → bigger, chunkier UI
+	# (and coarser, more CRT-like scanlines). 0.5 = 2x-size UI.
+	const HUD_RENDER_SCALE := 0.5
+	var svp := SubViewport.new()
+	svp.name = "HudViewport"
+	svp.transparent_bg = true
+	svp.disable_3d = true
+	svp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	svp.size = Vector2i(get_viewport().get_visible_rect().size * HUD_RENDER_SCALE)
+	layer.add_child(svp)
 
-	# Clean drawn meters (sprint / blink / voice / danger / objective pips) — no text.
-	var hud := GameHUD.new()
-	hud.player_fn = _local_player
-	hud.danger_fn = func(): return _danger
-	hud.tasks_fn = func(): return tasks
-	layer.add_child(hud)
+	_hud = GameHUD.new()
+	_hud.player_fn = _local_player
+	_hud.danger_fn = func(): return _danger
+	_hud.tasks_fn = func(): return tasks
+	_hud.recovery_fn = func(): return _recovery     # Phase 1: RESTOCK panel reads the manager
+	svp.add_child(_hud)
+
+	var crt := TextureRect.new()
+	crt.name = "CRT"
+	crt.set_anchors_preset(Control.PRESET_FULL_RECT)
+	crt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crt.texture = svp.get_texture()
+	crt.material = _hud.build_crt_material()
+	layer.add_child(crt)
+
+	# keep the HUD viewport matched to the window (at the render scale)
+	get_viewport().size_changed.connect(func():
+		if is_instance_valid(svp):
+			svp.size = Vector2i(get_viewport().get_visible_rect().size * HUD_RENDER_SCALE))
 
 	# Outage warning tint (red screen wash that pulses while the power's out).
 	_outage_tint = ColorRect.new()
@@ -395,19 +635,7 @@ void fragment() {
 		Color(1.0, 0.2, 0.15))
 	_outage_label.visible = false
 
-	# Pickup confirmation ("PICKED UP — FLASHLIGHT / press G ...") centered, fades out.
-	_pickup_label = Label.new()
-	_pickup_label.set_anchors_preset(Control.PRESET_CENTER)
-	_pickup_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_pickup_label.add_theme_font_size_override("font_size", 30)
-	_pickup_label.add_theme_color_override("font_color", Color(0.95, 0.92, 0.7))
-	_pickup_label.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-	_pickup_label.add_theme_constant_override("outline_size", 6)
-	_pickup_label.position = Vector2(-220, -40)
-	_pickup_label.size = Vector2(440, 80)
-	_pickup_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pickup_label.visible = false
-	layer.add_child(_pickup_label)
+	# Pickup confirmations now route through the HUD as a small bottom-left toast (_on_picked_up).
 
 	# Only the win/lose result uses text (a real game-state message, not a label).
 	_hud_center = _make_label(layer, Vector2(0, -40), HORIZONTAL_ALIGNMENT_CENTER, 40,
@@ -436,7 +664,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Restart only in solo for now (a clean MP restart needs a server-driven reload).
 	if event.is_action_pressed("restart") and not Net.is_active():
 		get_tree().paused = false
-		get_tree().reload_current_scene()
+		Transition.reload(true)
 		return
 	if event.is_action_pressed("pause") and _state == "play" and not _paused:
 		_set_paused(true)
@@ -451,6 +679,14 @@ func _process(delta: float) -> void:
 		_update_danger(delta)
 		if Net.is_authority():
 			_update_coop(delta)
+			_check_player_bumps(delta)
+	# DOWN panic flash on the rising edge of the local player being caught (local feedback only).
+	if _horror != null:
+		var lp := _local_player()
+		var down: bool = lp != null and lp._downed
+		if down and not _was_downed:
+			_horror.flash("DOWN", HorrorTextOverlay.DANGER, 1.6)
+		_was_downed = down
 	_pulse_t += delta
 	var pulse: float = 1.0 + sin(_pulse_t * (4.0 + _danger * 10.0)) * 0.18 * _danger
 	_vmat.set_shader_parameter("strength", clamp(_danger * pulse, 0.0, 1.0))
@@ -499,16 +735,57 @@ func _on_task_completed(_task: Task) -> void:
 	var done := 0
 	var total := 0
 	for t in tasks:
-		if t.counts_toward_win:
+		if t.counts_for_win():       # active AND counts_toward_win — inactive pool tasks don't count
 			total += 1
 			if t.done:
 				done += 1
-	if done >= total:
+	if total > 0 and done >= total:  # guard: never insta-win on an empty active set
 		_win()
 
 
 ## Server/solo: handle downed teammates — revive when a standing player holds
 ## interact nearby, and lose only when EVERYONE is down.
+## Authority-only: two players sprinting into each other BUMP — both get shoved apart + a ~1s slowdown,
+## and the existing impact-drop roll (inside apply_knockback) may shake their cargo loose. Velocity is
+## estimated from per-frame position deltas (works for host + synced clients); a pair cooldown stops
+## chain-bumps. Inert with <2 players, so solo never triggers it.
+func _check_player_bumps(delta: float) -> void:
+	var players := get_tree().get_nodes_in_group("players")
+	if players.size() < 2:
+		return
+	var vel := {}
+	for n in players:
+		var p := n as WPlayer
+		if p == null:
+			continue
+		var last: Vector3 = _bump_last_pos.get(p, p.global_position)
+		vel[p] = (p.global_position - last) / maxf(delta, 0.001)
+		_bump_last_pos[p] = p.global_position
+	for k in _bump_cd.keys():
+		_bump_cd[k] = float(_bump_cd[k]) - delta
+		if float(_bump_cd[k]) <= 0.0:
+			_bump_cd.erase(k)
+	for i in players.size():
+		for j in range(i + 1, players.size()):
+			var a := players[i] as WPlayer
+			var b := players[j] as WPlayer
+			if a == null or b == null or a._downed or b._downed:
+				continue
+			if a.global_position.distance_to(b.global_position) > bump_radius:
+				continue
+			if (vel.get(a, Vector3.ZERO) - vel.get(b, Vector3.ZERO)).length() < bump_min_rel_speed:
+				continue
+			var key := "%d_%d" % [mini(a.get_instance_id(), b.get_instance_id()), maxi(a.get_instance_id(), b.get_instance_id())]
+			if _bump_cd.has(key):
+				continue
+			_bump_cd[key] = bump_cooldown
+			var dir := a.global_position - b.global_position
+			dir.y = 0.0
+			dir = dir.normalized() if dir.length() > 0.01 else Vector3(1, 0, 0)
+			a.apply_knockback(dir * bump_force + Vector3.UP, bump_stagger)
+			b.apply_knockback(-dir * bump_force + Vector3.UP, bump_stagger)
+
+
 func _update_coop(delta: float) -> void:
 	var players := get_tree().get_nodes_in_group("players")
 	var living := 0
@@ -568,5 +845,6 @@ func _show_end(kind: String) -> void:
 		_hud_center.text = "CAUGHT" + ("\n[ R ] to try again" if not Net.is_active() else "")
 		_hud_center.add_theme_color_override("font_color", Color(1.0, 0.15, 0.12))
 	else:
-		_hud_center.text = "HOUSE SECURE — you got out" + ("\n[ R ] to play again" if not Net.is_active() else "")
+		var won_text := "ELEVATOR LOADED — sending it up" if enable_recovery_mode else "HOUSE SECURE — you got out"
+		_hud_center.text = won_text + ("\n[ R ] to play again" if not Net.is_active() else "")
 		_hud_center.add_theme_color_override("font_color", Color(0.3, 1.0, 0.4))

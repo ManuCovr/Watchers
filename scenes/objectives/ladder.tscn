@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3]
+
+; Climbable ladder. Root + script; ladder.gd builds the mesh + ClimbArea in code. Drop instances in
+; the bunker at vertical transitions and tune climb_height / model_scale per spot in the Inspector.
+
+[ext_resource type="Script" path="res://scripts/objectives/ladder.gd" id="1_ladr"]
+
+[node name="Ladder" type="Node3D"]
+script = ExtResource("1_ladr")

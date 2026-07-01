@@ -15,22 +15,26 @@ extends CharacterBody3D
 @export var anger_speed_mult := 1.6   ## speed multiplier once angry
 @export var anger_watched_speed := 0.9 ## m/s it STILL creeps at while watched, when angry
 @export var stun_time := 6.0          ## seconds a thrown phone freezes it solid (the hard counter)
-@export var stun_color := Color(0.7, 0.95, 1.0)   ## eye tell while stunned
+@export var stun_color := Color(0.64, 0.8, 0.9)   ## eye tell while stunned (muted)
 @export_group("Look")
-@export var ANGEL_SCALE := 1.25       ## the PS1 angel model is ~2m; tweak to taste
-@export var ANGEL_Y := 1.45           ## lift so its feet/rings sit near the floor
-@export var angel_tint := Color(0.62, 0.6, 0.66)     ## darkens the ring texture (moody)
-@export var angel_glow := 0.22        ## faint self-emission so it reads in the dark
-@export var frozen_color := Color(0.35, 0.65, 1.0)   ## eye when you're watching it
-@export var moving_color := Color(1.0, 0.06, 0.03)   ## eye when it's creeping
+@export var eye_size := 1.3            ## the floating eyeball's largest dimension, in metres
+@export var ANGEL_Y := 1.0            ## float height — low, eye at waist/chest, not overhead
+@export var look_at_player := true    ## the pupil tracks the chased player (even when unobserved)
+## Correction so the model's PUPIL (not its -Z) ends up facing the player. Tune in the Inspector if
+## the eye looks the wrong way (e.g. set Y to 180 to flip front/back).
+@export var pupil_offset_deg := Vector3(0, 0, 0)
+@export var angel_tint := Color(0.62, 0.6, 0.66)     ## (unused now the body is the eyeball)
+@export var angel_glow := 0.22        ## (unused now the body is the eyeball)
+@export var frozen_color := Color(0.50, 0.66, 0.80)  ## watched — muted cool, not neon blue
+@export var moving_color := Color(0.82, 0.34, 0.28)  ## creeping — muted brick red, not pure red
 @export_group("Audio")
 @export var SKITTER_DB := -9.0
 @export var SKITTER_MAX_DIST := 22.0
 
-const EYE_Y := 1.5             # central ball height — sits in the middle of the rings
+const EYE_Y := 1.5             # (legacy) — body now floats at ANGEL_Y
 const WALL_MASK := 2            # only walls block line-of-sight
-const ANGEL_MESH := "res://assets/models/angel/Biblically_Accurate_Angel.obj"
-const ANGEL_TEX := "res://assets/models/angel/Ring_Texture.png"
+const EYE_MESH := "res://assets/models/eyeball/eye.obj"
+const EYE_TEX := "res://assets/models/eyeball/eyeball_texture.png"
 
 signal caught
 
@@ -48,9 +52,12 @@ var _stun_t := 0.0              # >0 = frozen solid by a thrown phone
 var net_stun := 0.0             # replicated so clients show the stun tell
 var outage_mult := 1.0          # >1 while the power's out (bolder in the dark)
 
-var _eye: MeshInstance3D
-var _eye_mat: StandardMaterial3D
-var _body_mat: StandardMaterial3D
+var _eye: MeshInstance3D         # the eyeball mesh (centred on the pivot)
+var _eye_shader_mat: ShaderMaterial   # primary: chromatic-aberration eye shader
+var _eye_std_mat: StandardMaterial3D  # fallback if the shader fails to load
+var _body: Node3D                # a PIVOT at the eye centre — rotated so the pupil tracks the player
+var _tell_energy := 0.9          # smoothed glow strength
+@export var ring_speed := 0.9    ## (unused — the eye no longer spins)
 var _flicker := 0.0
 var _cur_speed := 0.0           # ramps up when creeping = eases into motion, less robotic
 var _agent: NavigationAgent3D   # paths through the bunker so it can actually chase
@@ -59,58 +66,48 @@ var _audio: AudioStreamPlayer3D
 
 
 func _ready() -> void:
-	var body := MeshInstance3D.new()
-	var angel = load(ANGEL_MESH)
-	_body_mat = StandardMaterial3D.new()
-	_body_mat.roughness = 1.0
-	if angel != null:
-		# Biblically-accurate angel: the spinning RINGS are plain dark metal/gold (no eye on
-		# them) — the single EYE lives in the central ball (built below). The rings read in
-		# the dark from a faint cold rim-emission, keeping the silhouette eerie.
-		body.mesh = angel
-		body.scale = Vector3.ONE * ANGEL_SCALE
-		body.position = Vector3(0, ANGEL_Y, 0)
-		_body_mat.albedo_color = angel_tint * Color(0.5, 0.5, 0.55)
-		_body_mat.metallic = 0.7
-		_body_mat.roughness = 0.55
-		_body_mat.emission_enabled = true
-		_body_mat.emission = Color(0.4, 0.46, 0.7)
-		_body_mat.emission_energy_multiplier = angel_glow
-	else:
-		var cap := CapsuleMesh.new()
-		cap.height = 2.0
-		cap.radius = 0.30
-		body.mesh = cap
-		body.position = Vector3(0, 1.0, 0)
-		_body_mat.albedo_color = Color(0.015, 0.015, 0.022)
-	body.material_override = _body_mat
-	# The body becomes a shimmering hole in reality (screen refraction + drifting starfield). The
-	# EYE is a separate mesh built below, so the blue/red gameplay tell is unaffected.
-	var bsh := load("res://shaders/watcher.gdshader") as Shader
-	if bsh != null:
-		var bsm := ShaderMaterial.new()
-		bsm.shader = bsh
-		body.material_override = bsm
-	add_child(body)
+	# The watcher IS a single floating EYEBALL now. Its PUPIL tracks the player it's chasing, and the
+	# whole eye is washed gently by the tell (muted blue watched / muted red creeping) + a chromatic
+	# fringe. A PIVOT node sits at the eye's centre so look_at() rotates the ball in place.
+	_body = Node3D.new()
+	_body.position = Vector3(0, ANGEL_Y, 0)
+	add_child(_body)
 
-	# The EYE = the central ball inside the rings. The ring/eye texture sits on it (a
-	# glowing iris) and its emission COLOUR is the gameplay tell (blue frozen / red moving).
-	_eye = MeshInstance3D.new()
-	var sm := SphereMesh.new()
-	sm.radius = 0.32
-	sm.height = 0.64
-	_eye.mesh = sm
-	_eye.position = Vector3(0, EYE_Y, 0.0)
-	_eye_mat = StandardMaterial3D.new()
-	_eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_eye_mat.emission_enabled = true
-	var iris = load(ANGEL_TEX)
-	if iris != null:
-		_eye_mat.albedo_texture = iris         # the eye texture lives HERE, on the central ball
-	# albedo_color + emission are driven by the gameplay tell (blue frozen / red moving) so
-	# the ball glows the tell colour over the eye texture — readable across a dark room.
-	_eye.material_override = _eye_mat
-	add_child(_eye)
+	var mi := MeshInstance3D.new()
+	_eye = mi
+	# Material: the chromatic-aberration eye shader (StandardMaterial fallback if it won't load).
+	var esh := load("res://shaders/watcher_eye.gdshader") as Shader
+	var tex = load(EYE_TEX)
+	if esh != null:
+		_eye_shader_mat = ShaderMaterial.new()
+		_eye_shader_mat.shader = esh
+		if tex != null:
+			_eye_shader_mat.set_shader_parameter("tex", tex)
+		mi.material_override = _eye_shader_mat
+	else:
+		_eye_std_mat = StandardMaterial3D.new()
+		_eye_std_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_eye_std_mat.emission_enabled = true
+		if tex != null:
+			_eye_std_mat.albedo_texture = tex
+		mi.material_override = _eye_std_mat
+
+	var eyemesh = load(EYE_MESH)
+	if eyemesh != null:
+		mi.mesh = eyemesh
+		# Normalise unknown .obj units to eye_size, then CENTRE the mesh on the pivot origin (so the
+		# eyeball rotates about its own middle when it looks at you, instead of orbiting a point).
+		var aabb := (mi.mesh as Mesh).get_aabb()
+		var maxd: float = maxf(aabb.size.x, maxf(aabb.size.y, aabb.size.z))
+		var s: float = (eye_size / maxd) if maxd > 0.001 else 1.0
+		mi.scale = Vector3.ONE * s
+		mi.position = -aabb.get_center() * s
+	else:
+		var sm := SphereMesh.new()
+		sm.radius = eye_size * 0.5
+		sm.height = eye_size
+		mi.mesh = sm
+	_body.add_child(mi)
 
 	var col := CollisionShape3D.new()
 	var cap2 := CapsuleShape3D.new()
@@ -176,14 +173,15 @@ func _physics_process(delta: float) -> void:
 		else:
 			net_stun = 0.0
 			var observed := _observed_by_any()
-			# EARLY game: being watched freezes it solid. LATE game (angry): it ignores the gaze
-			# and keeps creeping (just slower) — the phone becomes the only hard stop.
-			if observed and not angry:
+			# Being watched freezes it solid — UNLESS it's angry OR the power is out (outage_mult>1).
+			# In a blackout it keeps coming no matter where you look (the gaze can't hold it).
+			var ignore_gaze := angry or outage_mult > 1.001
+			if observed and not ignore_gaze:
 				frozen = true
 				_cur_speed = 0.0
 				velocity = Vector3.ZERO
 			else:
-				frozen = observed       # angry+watched: tell still reads, but it MOVES
+				frozen = observed       # tell still reads, but it MOVES
 				_creep(delta, observed)
 				move_and_slide()
 			net_frozen = frozen
@@ -191,8 +189,29 @@ func _physics_process(delta: float) -> void:
 		frozen = net_frozen               # client: mirror the server's state
 		angry = net_angry
 
+	# The eye does NOT spin — its pupil LOCKS onto the player it's chasing (runs on every peer for a
+	# consistent stare; purely visual so a nearest-player approximation is fine on clients).
+	if _body != null and look_at_player:
+		_aim_pupil_at_player()
 	_update_audio()
 	_update_eye(delta)
+
+
+## Rotate the eye pivot so the model's pupil faces the nearest player. `pupil_offset_deg` corrects
+## for whichever local axis the pupil actually points down (look_at aims -Z by default).
+func _aim_pupil_at_player() -> void:
+	var p := _nearest_player()
+	if p == null:
+		return
+	# Aim at the player's real eye/camera position (tracks crouch), nudged a hair down to read as
+	# meeting the gaze rather than staring over the top of the screen.
+	var tgt := p.eye_pos() - Vector3(0, 0.13, 0)
+	if _body.global_position.distance_to(tgt) < 0.05:
+		return
+	_body.look_at(tgt, Vector3.UP)
+	_body.rotate_object_local(Vector3.UP, deg_to_rad(pupil_offset_deg.y))
+	_body.rotate_object_local(Vector3.RIGHT, deg_to_rad(pupil_offset_deg.x))
+	_body.rotate_object_local(Vector3.BACK, deg_to_rad(pupil_offset_deg.z))
 
 
 ## Frozen solid for `dur` seconds by a thrown cellphone (the desperation counter once it's angry).
@@ -340,24 +359,33 @@ func _observed_by_any() -> bool:
 
 
 func _update_eye(delta: float) -> void:
+	# States are deliberately SUBTLE now — a gentle wash + soft glow, not a garish red/blue beacon.
+	var col: Color
+	var energy: float
 	if is_stunned():
-		# Stunned by the phone — eye flares cold white-blue and pulses hard (clearly "knocked out").
-		_flicker += delta * 40.0
-		_eye_mat.albedo_color = stun_color
-		_eye_mat.emission = stun_color
-		_eye_mat.emission_energy_multiplier = 4.0 + absf(sin(_flicker)) * 5.0
+		# Stunned by the phone — cold wash with a slow shimmer (clearly "knocked out", still soft).
+		_flicker += delta * 18.0
+		col = stun_color
+		energy = 0.6 + absf(sin(_flicker)) * 0.45
 	elif frozen and not angry:
-		# Calm, steady blue — "I see you, I can't move."
-		_eye_mat.albedo_color = frozen_color
-		_eye_mat.emission = frozen_color
-		_eye_mat.emission_energy_multiplier = lerp(
-			_eye_mat.emission_energy_multiplier, 4.0, delta * 10.0)
+		# Watched: calm, steady, low — "I see you, I can't move."
+		col = frozen_color
+		_tell_energy = lerp(_tell_energy, 0.85, delta * 8.0)
+		energy = _tell_energy
 	else:
-		# Moving (or angry-and-watched): hot red. Angry = deeper, faster, brighter — it's pissed.
-		_flicker += delta * (30.0 + (24.0 if angry else 0.0))
-		var base := 2.5 + (2.0 if angry else 0.0)
-		var pulse: float = base + absf(sin(_flicker)) * (3.5 + (2.5 if angry else 0.0))
-		var col := moving_color if not angry else Color(1.0, 0.0, 0.0)
-		_eye_mat.albedo_color = col
-		_eye_mat.emission = col
-		_eye_mat.emission_energy_multiplier = pulse
+		# Creeping (or angry-and-watched): a muted red, breathing slightly. Angry = a touch hotter.
+		_flicker += delta * (10.0 + (8.0 if angry else 0.0))
+		col = moving_color if not angry else Color(0.9, 0.26, 0.20)
+		energy = (0.7 if not angry else 0.95) + absf(sin(_flicker)) * (0.4 + (0.3 if angry else 0.0))
+	_apply_tell(col, energy)
+
+
+## Push the current tell colour + glow onto whichever eye material exists (shader or fallback).
+func _apply_tell(col: Color, energy: float) -> void:
+	if _eye_shader_mat != null:
+		_eye_shader_mat.set_shader_parameter("tell_color", col)
+		_eye_shader_mat.set_shader_parameter("tell_energy", energy)
+	elif _eye_std_mat != null:
+		_eye_std_mat.albedo_color = col
+		_eye_std_mat.emission = col
+		_eye_std_mat.emission_energy_multiplier = energy * 1.8

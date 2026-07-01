@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://bfbns8c1dlkbo"
+path="res://.godot/imported/eye.obj-f4938c006ab7105e3c8e32aa2df67ec9.mesh"
+
+[deps]
+
+files=["res://.godot/imported/eye.obj-f4938c006ab7105e3c8e32aa2df67ec9.mesh"]
+
+source_file="res://assets/models/eyeball/eye.obj"
+dest_files=["res://.godot/imported/eye.obj-f4938c006ab7105e3c8e32aa2df67ec9.mesh", "res://.godot/imported/eye.obj-f4938c006ab7105e3c8e32aa2df67ec9.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

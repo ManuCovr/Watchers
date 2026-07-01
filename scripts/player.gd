@@ -8,8 +8,8 @@ extends CharacterBody3D
 ## Blink/headlamp/emote knobs are @export-ed so everything is editable in-editor.
 
 ## The visible co-op body. EXPORTED so you can swap the whole character scene in player.tscn. Defaults
-## (set at runtime, see _ready) to the original customizable "potato guy" (character_rig.gd). Swap to
-## gangbeast_character.tscn / badguy_character.tscn in the Inspector for the other rigs.
+## (set at runtime, see _ready) to the low-poly BLOB (actors/player_models/player_blob_black.tscn, a
+## PlayerModelView). Swap to another player_blob_<colour>.tscn variant in the Inspector per player.
 @export var character_scene: PackedScene
 
 # All movement feel is in this Resource — assign default_movement.tres in the
@@ -17,21 +17,18 @@ extends CharacterBody3D
 @export var tuning: MovementTuning
 
 @export_group("Headlamp")
-@export var headlamp_energy := 1.1     ## dim ambient wash — the FLASHLIGHT is the real light now
+@export var headlamp_energy := 0.0     ## OFF by default — it lit up the mirror/teammates and looked weird. The handheld FLASHLIGHT is the only player light now. Set >0 to bring back a faint wash.
 @export var headlamp_range := 12.0
 @export var headlamp_angle := 50.0
 
+@export_group("Jump / crouch")
+@export var jump_force := 4.6           ## upward velocity on jump (Space)
+@export var crouch_eye_factor := 0.55   ## camera drops to this fraction of eye height when crouched
+@export var crouch_speed_factor := 0.55 ## move this much slower while crouched
+@export var crouch_lerp := 16.0         ## how fast you duck / stand (snappy, not laggy)
+
 @export_group("Interaction")
 @export var interact_reach := 3.2      ## how far the look-at aim-ray reaches for buttons/levers/items
-
-@export_group("Melee (friendslop)")
-@export var melee_range := 2.4          ## how far a swing reaches
-@export var melee_cone := 0.4           ## aim dot threshold (~66° in front)
-@export var melee_cooldown := 0.7       ## seconds between swings
-const MELEE_MODELS := {
-	"crowbar": "res://assets/psx2/Structures/rusty_crowbar_mx_1.glb",
-	"fish": "res://assets/psx2/Props/fish_mx_1.glb",
-}
 
 @export_group("Flashlight (tool)")
 @export var flashlight_energy := 6.0
@@ -39,6 +36,14 @@ const MELEE_MODELS := {
 @export var flashlight_angle := 26.0   ## tight cone — a real torch
 @export var flashlight_drain := 0.018  ## battery/sec while ON (game.gd overrides from GameConfig)
 @export var flashlight_recharge := 0.0 ## battery/sec while OFF
+
+@export_group("Phone flash (Watcher stun tool — NOT throwable)")
+@export var phone_max_charges := 3        ## flashes before you need a battery
+@export var phone_flash_range := 16.0     ## metres the flash reaches
+@export var phone_flash_angle := 28.0     ## half-cone degrees you must be aiming within
+@export var phone_flash_cooldown := 4.0   ## seconds between flashes
+@export var phone_stun_duration := 3.0    ## seconds it freezes the Watcher
+@export var phone_stun_late_mult := 0.6   ## stun shortened this much while the power's out (bolder Watcher)
 
 @export_group("Blink / stamina")
 @export var blink_enabled := true      ## off for the lobby (relaxed, full-vision space)
@@ -49,6 +54,20 @@ const MELEE_MODELS := {
 @export var blink_recovery := 0.4      ## grace after a blink before draining resumes
 @export var stare_drain := 1.0         ## drain multiplier while still + holding an angle
 @export var move_drain := 0.4          ## drain multiplier while moving / sweeping
+
+@export_group("Ladder climb")
+@export var ladder_climb_speed := 3.2      ## up/down speed while inside a ladder's ClimbArea
+@export var ladder_stand_dist := 0.55      ## how far in front of the rungs you're held while climbing
+
+@export_group("Carry chaos (impact drop)")
+## A hard impact while carrying can knock the cargo out of your hands — chance, not constant. Sprinting
+## + heavy/fragile cargo raise it; a short grace after grabbing keeps tiny bumps from instantly dropping.
+@export var min_impact_speed_for_drop := 4.0
+@export var base_drop_chance := 0.06
+@export var sprint_drop_bonus := 0.14
+@export var fragile_drop_bonus := 0.10
+@export var max_drop_chance := 0.7
+@export var pickup_drop_grace_ms := 600
 
 @export_group("Emote / meme")
 @export var emote_texture: Texture2D            ## world middle finger OTHERS see (3D billboard)
@@ -67,6 +86,10 @@ static var input_blocked := false
 var cam: Camera3D
 var _head: Node3D
 var _pitch := 0.0
+var _crouch_t := 0.0            # 0 standing .. 1 crouched (smoothed)
+var net_crouch := 0.0          # replicated so teammates/mirror see you crouch
+var _col: CollisionShape3D     # body capsule (shrunk while crouching)
+var _capsule: CapsuleShape3D
 var _bob_t := 0.0
 var _breath_t := 0.0
 var _sprint_budget := 0.0
@@ -79,6 +102,13 @@ var _blink_t := -1.0           # <0 = eyes open; >=0 = mid-blink, counting up
 var _recover_t := 0.0
 var _look_activity := 0.0      # decays; bumped by mouse motion
 var _move_activity := 0.0      # set each physics step from WASD input
+
+# --- STAIRS / FALL SAFETY ---
+@export_group("Stairs / safety")
+@export var step_height := 0.45     ## auto-climb steps/curbs up to this tall (CharacterBody3D won't on its own)
+@export var fall_limit := -14.0     ## fall below this Y -> respawn at the last safe spot (anti-softlock)
+var _last_safe := Vector3.ZERO
+var _safe_t := 0.0
 
 # --- EMOTE SYSTEM (state) ---
 var _emote_sprite: Sprite3D     # world-space billboard — visible to OTHER viewports
@@ -94,37 +124,57 @@ var interact_held := false      # replicated: holding interact (for reviving tea
 var net_downed := false         # caught by a watcher; needs a revive
 var megaphone := false          # holding the lobby megaphone -> boosted/distorted voice
 var _downed := false
+var _ladder: Node = null        # the Ladder whose ClimbArea we're inside (free-physics climb)
+var _grab_time_ms := 0          # when the current held_item was grabbed (impact-drop grace)
 var _body: Node3D               # visible body so teammates can see you (the rig)
 var _character: PlayerCharacter # the expressive rig (big eyes + voice mouth)
 
 var _downed_label: Label3D      # "REVIVE (hold E)" prompt over a downed player
 var _downed_overlay: ColorRect
-var attack_held := false        # replicated: attack button down (throw / swing)
+var attack_held := false        # replicated: attack button down (swing)
+var throw_held := false          # replicated: throw button (Q) down -> charge + throw a held item
+var _knockback := Vector3.ZERO   # decaying shove from a bonk/thrown item (funny, non-lethal)
+var _stagger := 0.0              # brief loss-of-control after a hit
 var holding := false            # replicated: are we carrying something (visual hint)
 var _prev_interact := false
 var _prev_attack := false
-var _interact_pressed := false  # one-shot press flag (consumed by tasks)
-var _attack_pressed := false
+## Press EDGES as short-lived timestamps (ms), NOT sticky booleans. A press is consumable for a
+## brief window then EXPIRES on its own — so an un-consumed tap can't latch and later auto-trigger a
+## pickup/task the instant you look at it (that was the "grabbed it without pressing E" bug). -1 = none.
+var _interact_press_t := -1.0
+var _attack_press_t := -1.0
+const PRESS_WINDOW_MS := 120.0
 
 # --- LOOK-AT INTERACTION ---
 var aimed: Interactable = null  # the interactable this player is currently looking at (or null)
+
+# --- TACTILE GESTURE (levers/valves) ---
+# While holding E aimed at a PULL/ROTATE interactable, the local owner diverts mouse motion into this
+# monotonic accumulator (look is suppressed) and replicates it; the authority task reads the delta.
+var tactile_input := 0.0
+var _prev_tactile := Vector2.ZERO
+var _rot_cursor := Vector2.ZERO     # virtual cursor for ROTATE — real circling accumulates, shaking cancels
+var _rot_angle := 0.0
+var _rot_started := false
+# Button POKE: the local hand jabs out to a pressed button for a moment (point pose).
+var _poke_start := -1.0
+var _poke_dur := 0.2
+var _poke_point := Vector3.ZERO
+var _poke_left := false   # which hand reaches — randomised per press
 
 # --- ITEMS / TOOLS ---
 # Inventory flags (picked up in the world). A "tool" is held in-hand (flashlight/phone/cig);
 # the keycard sits in your pocket; a capacitor is a two-handed carry that slows you.
 var has_flashlight := false
 var has_phone := false
+var phone_charges := 0          # flash charges remaining (refilled by a battery)
+var _phone_cd := 0.0            # flash cooldown timer
 var has_keycard := false
 var cigs := 0
 var held_tool := ""             # "", "flashlight", "phone", "cig" — cycles as you pick things up
 var carrying: Node3D = null     # a carried capacitor model (set by the capacitor task)
-# Melee (friendslop): a crowbar or a fish you can SWING to bonk teammates down.
-var held_melee := "":           # "", "crowbar", "fish" — replicated so everyone sees + swings it
-	set(v): held_melee = v; _rebuild_melee_vm()
-var _melee_vm: Node3D           # the weapon viewmodel (held in front of you / by your hand)
-var _swing := 0.0               # 0..1 swing animation phase (driven by the attack edge)
-var _prev_attack_swing := false
-var _melee_cd := 0.0            # server cooldown so one swing can't chain-down everyone
+var held_item: PhysicsItem = null   # a grabbed physics toy (fish/crowbar); the item drives itself
+var aimed_item: PhysicsItem = null  # the grabbable item you're looking at (for the HUD pickup prompt)
 var flashlight_on := false
 var net_flashlight := false     # replicated so teammates see your beam
 var flashlight_battery := 1.0   # 0..1
@@ -139,7 +189,6 @@ var _world_cig: Node3D          # cig in the player's mouth (you, the mirror, an
 var cig_calm_time := 7.0
 var cig_stamina_restore := 1.0
 var capacitor_carry_slow := 0.62
-signal phone_thrown(origin: Vector3, dir: Vector3)   # game.gd spawns the projectile
 signal picked_up(kind: String)                       # game.gd shows a "Picked up X" message
 # Remote-player smoothing: owners replicate these; remotes lerp toward them.
 var net_pos := Vector3.ZERO
@@ -177,7 +226,7 @@ func _ready() -> void:
 	# exactly where the eyes/mouth tell earns its keep ("who's talking?" with no UI).
 	var hue := fmod(absf(float(str(name).hash())) * 0.0001, 1.0)   # stable per-player colour
 	if character_scene == null:
-		character_scene = load("res://actors/player/character.tscn")   # the original customizable potato guy
+		character_scene = load("res://actors/player_models/player_blob_black.tscn")  # low-poly blob (default body)
 	_character = character_scene.instantiate() as PlayerCharacter
 	_character.set_tint(Color.from_hsv(hue, 0.5, 0.85))
 	add_child(_character)
@@ -187,8 +236,12 @@ func _ready() -> void:
 		# cameras (the lobby MIRROR) can still see, so you can look at yourself.
 		_character.set_first_person_layer()
 		cam.cull_mask &= ~PlayerCharacter.SELF_LAYER_BIT
-
-	_rebuild_melee_vm()         # build the weapon viewmodel if held_melee already synced in
+		# BUT we DO want to see our own hands (Gambling-With-Friends style) — pull them back onto a
+		# visible layer + switch them to a camera-relative viewmodel pose. Done AFTER the self-layer
+		# pass above so it isn't clobbered.
+		if _character.has_method("enable_first_person_hands"):
+			_character.enable_first_person_hands(cam)
+		_apply_local_customization()    # carry the lobby-mirror look (body/hands/outline/face) onto me
 
 	# Floating "revive me" prompt shown to everyone when this player is downed.
 	_downed_label = Label3D.new()
@@ -201,16 +254,17 @@ func _ready() -> void:
 	_downed_label.visible = false
 	add_child(_downed_label)
 
-	# Headlamp points exactly where you look (SpotLight3D emits along -Z, like the camera).
-	# It's only a DIM wash now — the handheld flashlight is the light you rely on (and lose).
-	var lamp := SpotLight3D.new()
-	lamp.light_color = Color(0.9, 0.93, 1.0)
-	lamp.light_energy = headlamp_energy
-	lamp.spot_range = headlamp_range
-	lamp.spot_angle = headlamp_angle
-	lamp.spot_attenuation = 1.4
-	lamp.position = Vector3(0, -0.1, 0)
-	cam.add_child(lamp)
+	# Headlamp: OFF by default (it washed the mirror / teammates and read as the player "glowing").
+	# Only built if you dial headlamp_energy back up. The handheld flashlight is the real light now.
+	if headlamp_energy > 0.0:
+		var lamp := SpotLight3D.new()
+		lamp.light_color = Color(0.9, 0.93, 1.0)
+		lamp.light_energy = headlamp_energy
+		lamp.spot_range = headlamp_range
+		lamp.spot_angle = headlamp_angle
+		lamp.spot_attenuation = 1.4
+		lamp.position = Vector3(0, -0.1, 0)
+		cam.add_child(lamp)
 
 	# Handheld flashlight: a tight bright cone, battery-limited, starts OFF. Built on EVERY copy
 	# (lights are global) so teammates literally see your beam sweep the dark. Driven by
@@ -222,8 +276,11 @@ func _ready() -> void:
 	_flashlight.spot_range = flashlight_range
 	_flashlight.spot_angle = flashlight_angle
 	_flashlight.spot_attenuation = 0.9
-	_flashlight.spot_angle_attenuation = 0.4
-	_flashlight.shadow_enabled = true
+	# Softer cone edge (gentle vignette at the rim) so the beam doesn't read as a hard disc.
+	_flashlight.spot_angle_attenuation = 1.0
+	# NO shadows: the FP hands sit right at the light origin and throw huge ugly shadows across the
+	# beam. A handheld torch viewmodel is the classic case where shadow-casting hurts more than helps.
+	_flashlight.shadow_enabled = false
 	_flashlight.position = Vector3(0.18, -0.18, 0.0)   # offset to the hand, not the eye
 	cam.add_child(_flashlight)
 
@@ -234,6 +291,8 @@ func _ready() -> void:
 	col.shape = cap
 	col.position = Vector3(0, 0.85, 0)
 	add_child(col)
+	_col = col
+	_capsule = cap
 
 	collision_layer = 1          # player
 	collision_mask = 2           # collide with walls/floors only
@@ -290,6 +349,70 @@ func _build_downed_overlay() -> void:
 	_downed_overlay.add_child(lbl)
 
 
+# ---- customization (lobby mirror) -------------------------------------------
+## Replicated so teammates see your blob colours. Face paint is sent separately (compressed PNG via
+## RPC on apply / spawn) — never per stroke. See _apply_local_customization / receive_face_png.
+var net_body_color := Color(0.12, 0.12, 0.14)
+var net_outline_color := Color(0.04, 0.04, 0.05)
+var _remote_look_applied := Color(0, 0, 0, 0)   # sentinel so remotes only re-apply on change
+
+
+## LOCAL owner: push the PlayerCustomization look onto my model + keep it live while I edit at the
+## lobby mirror, and replicate the colours. Face paint is broadcast as a PNG (deferred) so late peers
+## / the bunker scene get it without per-stroke spam.
+func _apply_local_customization() -> void:
+	if not _local or _character == null:
+		return
+	PlayerCustomization.apply_to(_character)
+	net_body_color = PlayerCustomization.body_color
+	net_outline_color = PlayerCustomization.outline_color
+	if not PlayerCustomization.changed.is_connected(_on_custom_changed):
+		PlayerCustomization.changed.connect(_on_custom_changed)
+	if Net.is_active():
+		broadcast_face.call_deferred()
+
+
+func _on_custom_changed() -> void:
+	if not _local or _character == null:
+		return
+	PlayerCustomization.apply_to(_character)
+	net_body_color = PlayerCustomization.body_color
+	net_outline_color = PlayerCustomization.outline_color
+
+
+## Call when the player finishes painting (UI "Apply") — send the face image once to everyone.
+func broadcast_face() -> void:
+	if not _local or not Net.is_active():
+		return
+	receive_face_png.rpc(PlayerCustomization.face_png())
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func receive_face_png(bytes: PackedByteArray) -> void:
+	if _character == null or not _character.has_method("set_face_texture"):
+		return
+	var img := Image.new()
+	if bytes.is_empty() or img.load_png_from_buffer(bytes) != OK:
+		return
+	_character.set_face_texture(ImageTexture.create_from_image(img))
+
+
+## REMOTE copy: re-apply replicated colours only when they actually change (cheap idle).
+func _apply_remote_look() -> void:
+	if net_body_color == _remote_look_applied:
+		return
+	_remote_look_applied = net_body_color
+	if _character.has_method("set_player_color"):
+		_character.set_player_color(net_body_color)
+	if "outline_color" in _character:
+		_character.outline_color = net_outline_color
+
+
+func _exit_tree() -> void:
+	if PlayerCustomization.changed.is_connected(_on_custom_changed):
+		PlayerCustomization.changed.disconnect(_on_custom_changed)
+
+
 ## Replicate position, facing and emote-state from the owning peer to everyone else.
 func _build_net_sync() -> void:
 	if not Net.is_active():
@@ -303,10 +426,14 @@ func _build_net_sync() -> void:
 	cfg.add_property(NodePath(".:net_emote"))
 	cfg.add_property(NodePath(".:net_mouth"))      # voice amplitude -> remote mouth flap
 	cfg.add_property(NodePath(".:interact_held"))  # server reads for revives + press edges
+	cfg.add_property(NodePath(".:tactile_input"))  # server reads the gesture delta for tactile tasks
 	cfg.add_property(NodePath(".:attack_held"))
+	cfg.add_property(NodePath(".:throw_held"))      # server reads for the held-item throw charge
+	cfg.add_property(NodePath(".:net_crouch"))      # teammates/mirror see you crouch
 	cfg.add_property(NodePath(".:net_flashlight"))  # teammates see your beam on/off
 	cfg.add_property(NodePath(".:net_smoking"))     # teammates see your cigarette
-	cfg.add_property(NodePath(".:held_melee"))      # which melee weapon you're holding (crowbar/fish)
+	cfg.add_property(NodePath(".:net_body_color"))  # customization: blob + hand colour
+	cfg.add_property(NodePath(".:net_outline_color"))
 	sync.replication_config = cfg
 	sync.set_multiplayer_authority(get_multiplayer_authority())
 	add_child(sync)
@@ -436,7 +563,6 @@ func _update_emote() -> void:
 func _process(delta: float) -> void:
 	_update_input_edges()       # detect interact/attack presses from the synced held flags
 	_update_emote()             # local drives it, remote mirrors the replicated flag
-	_update_melee(delta)        # weapon swing visual (all copies) + server hit resolution
 	if _local:
 		_update_blink(delta)
 	else:
@@ -444,7 +570,14 @@ func _process(delta: float) -> void:
 		var t := clampf(delta * 16.0, 0.0, 1.0)
 		# Waddle the rig by how far it's catching up = reads as walking, cheaply.
 		if _character != null:
+			_apply_remote_look()                   # pick up replicated body/outline colour changes
 			_character.set_move(clampf(global_position.distance_to(net_pos) * 4.0, 0.0, 1.0))
+			_character.set_look_pitch(net_pitch)   # remotes tilt their head with their aim
+			_character.set_crouch(net_crouch)      # remotes show their crouch
+			if not net_downed:      # don't fight the tip-over rotation while a remote is downed
+				var rl := global_transform.basis.inverse() * (net_pos - global_position)
+				rl.y = 0.0
+				_character.set_movement_lean(rl * 8.0, delta)   # remotes lean from their catch-up direction
 		global_position = global_position.lerp(net_pos, t)
 		rotation.y = lerp_angle(rotation.y, net_yaw, t)
 		if _head != null:
@@ -455,12 +588,32 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not _local or input_blocked:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var rel: Vector2 = event.relative
+		# Tactile gesture? Divert the mouse into the lever/valve and DON'T move the camera.
+		var kind := _tactile_kind()
+		if kind == Interactable.Kind.PULL:
+			tactile_input += maxf(0.0, rel.y) * 0.01            # mouse is fully committed to heaving the lever
+			return
+		elif kind == Interactable.Kind.ROTATE:
+			# A virtual cursor integrates the mouse; we add the SIGNED change of its angle. Real circling
+			# rotates the cursor steadily (accumulates); a back-and-forth shake just oscillates it (≈0).
+			_rot_cursor = (_rot_cursor + rel * 0.06).limit_length(48.0)
+			if _rot_cursor.length() > 10.0:
+				var a := _rot_cursor.angle()
+				if _rot_started:
+					tactile_input += angle_difference(_rot_angle, a)
+				_rot_angle = a
+				_rot_started = true
+			return
+		_prev_tactile = Vector2.ZERO
+		_rot_started = false
+		_rot_cursor = Vector2.ZERO
 		var sens := tuning.mouse_sensitivity * sens_multiplier
-		rotate_y(-event.relative.x * sens)
-		_pitch = clamp(_pitch - event.relative.y * sens, tuning.pitch_min, tuning.pitch_max)
+		rotate_y(-rel.x * sens)
+		_pitch = clamp(_pitch - rel.y * sens, tuning.pitch_min, tuning.pitch_max)
 		_head.rotation.x = _pitch
 		# Sweeping the gaze counts as activity (slows the stamina drain).
-		_look_activity = minf(1.0, _look_activity + event.relative.length() * 0.02)
+		_look_activity = minf(1.0, _look_activity + rel.length() * 0.02)
 
 
 # --- INTERACT / ATTACK (network-robust) -------------------------------------
@@ -468,25 +621,30 @@ func _unhandled_input(event: InputEvent) -> void:
 ## SERVER detects a press as the rising edge of the synced value — so tasks work
 ## identically for the host AND every client, with no fragile per-press RPC.
 func _update_input_edges() -> void:
+	var now := float(Time.get_ticks_msec())
 	if interact_held and not _prev_interact:
-		_interact_pressed = true
+		_interact_press_t = now                       # fresh press: open the consume window
+	elif _interact_press_t >= 0.0 and now - _interact_press_t > PRESS_WINDOW_MS:
+		_interact_press_t = -1.0                      # expire an un-consumed press (no sticky latch)
 	_prev_interact = interact_held
 	if attack_held and not _prev_attack:
-		_attack_pressed = true
+		_attack_press_t = now
+	elif _attack_press_t >= 0.0 and now - _attack_press_t > PRESS_WINDOW_MS:
+		_attack_press_t = -1.0
 	_prev_attack = attack_held
 
 
 ## True ONCE per press; the first system to call it consumes the press.
 func consume_interact() -> bool:
-	if _interact_pressed:
-		_interact_pressed = false
+	if _interact_press_t >= 0.0 and float(Time.get_ticks_msec()) - _interact_press_t <= PRESS_WINDOW_MS:
+		_interact_press_t = -1.0          # one consumer wins, then the press is spent
 		return true
 	return false
 
 
 func consume_attack() -> bool:
-	if _attack_pressed:
-		_attack_pressed = false
+	if _attack_press_t >= 0.0 and float(Time.get_ticks_msec()) - _attack_press_t <= PRESS_WINDOW_MS:
+		_attack_press_t = -1.0
 		return true
 	return false
 
@@ -546,17 +704,86 @@ func is_using(piece: Node) -> bool:
 	return interact_held and not _downed and aimed == piece
 
 
+## The gesture style of what we're actively using right now (PRESS if none) — drives mouse capture.
+func _tactile_kind() -> int:
+	if interact_held and not _downed and aimed != null and is_instance_valid(aimed) and aimed.enabled:
+		return aimed.interaction_type
+	return Interactable.Kind.PRESS
+
+
+## The node the hand should reach + grip while gesturing — the moving handle/rim if the piece exposes
+## one (so the hand FOLLOWS the lever/valve), else the piece body. Null when not gesturing.
+func tactile_target() -> Node3D:
+	if _tactile_kind() != Interactable.Kind.PRESS and aimed != null:
+		return aimed.grab_point if aimed.grab_point != null and is_instance_valid(aimed.grab_point) else aimed
+	return null
+
+
+## The secondary prompt line ("PULL MOUSE DOWN" / "ROTATE MOUSE") while gesturing, else "".
+func tactile_hold_prompt() -> String:
+	if _tactile_kind() != Interactable.Kind.PRESS and aimed != null:
+		return aimed.hold_prompt
+	return ""
+
+
+## Is the local hand mid-poke (jabbing a pressed button)? + the jab progress (0=rest, .5=touch, 1=back).
+func poke_active() -> bool:
+	return _poke_start >= 0.0 and (Time.get_ticks_msec() / 1000.0 - _poke_start) < _poke_dur
+func poke_phase() -> float:
+	return clampf((Time.get_ticks_msec() / 1000.0 - _poke_start) / _poke_dur, 0.0, 1.0)
+func poke_point() -> Vector3:
+	return _poke_point
+func poke_is_left() -> bool:
+	return _poke_left
+
+
+## The grabbable physics item you're MOST DIRECTLY looking at — the single source of truth for both
+## the HUD "[E] PICK UP" prompt AND the actual grab (the item only grabs if it == this). We rank by
+## crosshair ALIGNMENT (highest dot = most centred), not raw distance, so an item off to the side
+## never beats the one under your reticle; distance is only a gentle tiebreak between equally-aimed
+## items. Runs on the local owner (HUD) and on the authority (so it drives grabs for every player).
+func _update_aimed_item() -> void:
+	aimed_item = null
+	if held_item != null:
+		return
+	var dir := aim_dir()
+	var eye := eye_pos()
+	var best_score := -1.0
+	for n in get_tree().get_nodes_in_group("phys_items"):
+		var it := n as PhysicsItem
+		if it == null or it.held_by != null:
+			continue
+		var to := it.global_position - eye
+		var d := to.length()
+		if d > it.grab_range or d < 0.05:
+			continue
+		var align := dir.dot(to / d)
+		if align < 0.92:                   # must be near the crosshair (~23° cone) — no peripheral grabs
+			continue
+		var score := align - d * 0.04      # alignment dominates; nearer wins only on a near-tie
+		if score > best_score:
+			best_score = score
+			aimed_item = it
+
+
 # ---- ITEMS / TOOLS ----------------------------------------------------------
 func _update_items(delta: float) -> void:
 	# Flashlight: toggle (battery-gated), then drain while on / optionally trickle while off.
+	# HAND OCCUPANCY: the torch is a one-hand tool — you can't hold it while your hands are full
+	# with a physics item or a two-handed carry. Toggling on is blocked, and grabbing something
+	# while it's on snaps it off (no impossible "torch + crowbar + valve" overlaps).
 	if Input.is_action_just_pressed("flashlight") and has_flashlight and not input_blocked:
-		if flashlight_battery > 0.02 or flashlight_on:
+		if held_item != null or carrying != null:
+			_play_ui_sound("res://assets/audio/sfx/button_10.ogg", -12.0, 0.8)   # hands full
+		elif flashlight_battery > 0.02 or flashlight_on:
 			flashlight_on = not flashlight_on
 			if not AudioGen.is_headless():
 				var s := load("res://assets/audio/sfx/button_flashlight_1.ogg")
 				if s != null:
 					var a := AudioStreamPlayer.new(); a.stream = s; a.volume_db = -6.0
 					add_child(a); a.play(); a.finished.connect(a.queue_free)
+	if flashlight_on and (held_item != null or carrying != null):
+		flashlight_on = false                # hands just got full -> torch off
 	if flashlight_on:
 		flashlight_battery = maxf(0.0, flashlight_battery - flashlight_drain * delta)
 		if flashlight_battery <= 0.0:
@@ -565,12 +792,12 @@ func _update_items(delta: float) -> void:
 		flashlight_battery = minf(1.0, flashlight_battery + flashlight_recharge * delta)
 	net_flashlight = flashlight_on
 
-	# Cellphone: one-time throw at the watcher (game.gd spawns + flies the projectile).
+	# Cellphone FLASH: a limited-use Watcher stun tool (no longer throwable). Aim at the figure and
+	# press the phone key — the camera flash blinds it for a few seconds. 3 charges; refill at a battery.
+	if _phone_cd > 0.0:
+		_phone_cd = maxf(0.0, _phone_cd - delta)
 	if Input.is_action_just_pressed("throw_phone") and has_phone and not input_blocked:
-		has_phone = false
-		if held_tool == "phone":
-			held_tool = ""
-		phone_thrown.emit(eye_pos() + aim_dir() * 0.5, aim_dir())
+		_try_phone_flash()
 
 	# Cigarette: PURELY COMEDIC. Always available (no pack needed), light up any time. You get a
 	# cig in the corner of your view + drifting smoke. No gameplay effect — just vibes.
@@ -599,6 +826,116 @@ func _update_items(delta: float) -> void:
 	if _world_cig != null:
 		_world_cig.visible = _cig_timer > 0.0    # POV cig (you)
 	_set_char_smoking(_cig_timer > 0.0)          # body cig on the rig (mirror + teammates)
+
+
+## Hand-occupancy gate for one-shot tools (the phone flash). You can't raise the phone while a held
+## physics item or a two-handed carry occupies your hands, while gesturing a tactile task, or downed —
+## priority: downed > tactile task > held item/carry > tool. Keeps tool use physically plausible.
+func _can_use_tool() -> bool:
+	if _downed or carrying != null or held_item != null:
+		return false
+	if _tactile_kind() != Interactable.Kind.PRESS:
+		return false
+	return true
+
+
+## PHONE FLASH (owner-side). Gate on charges + cooldown locally for a responsive HUD, fire the local
+## blind-flash FX, then ask the AUTHORITY to validate range/cone/LOS and stun the Watcher.
+func _try_phone_flash() -> void:
+	if _phone_cd > 0.0:
+		return
+	if phone_charges <= 0:
+		_play_ui_sound("res://assets/audio/sfx/button_10.ogg", -6.0, 0.7)   # empty click — find a battery
+		return
+	# Item-occupancy: can't flash mid-swing/throw of a held item (see _can_use_tool).
+	if not _can_use_tool():
+		return
+	phone_charges -= 1
+	_phone_cd = phone_flash_cooldown
+	_phone_flash_fx()
+	var origin := eye_pos()
+	var dir := aim_dir()
+	if Net.is_active():
+		_net_flash.rpc_id(1, origin, dir)     # host validates + applies the stun
+	else:
+		_do_flash_stun(origin, dir)
+
+
+## A bright, brief self-flash (you raised the phone; the glare washes your own view a little too).
+func _phone_flash_fx() -> void:
+	if AudioGen.is_headless():
+		return
+	if _flashlight != null and _flashlight.get_parent() != null:
+		var pop := OmniLight3D.new()
+		pop.light_color = Color(1, 1, 1)
+		pop.light_energy = 8.0
+		pop.omni_range = 6.0
+		_flashlight.get_parent().add_child(pop)
+		pop.position = Vector3(0.1, -0.1, -0.3)
+		var tw := create_tween()
+		tw.tween_property(pop, "light_energy", 0.0, 0.22)
+		tw.tween_callback(pop.queue_free)
+	_play_ui_sound("res://assets/audio/sfx/camera_flash.mp3", -1.0, 1.0)   # downloaded iOS camera-flash snap
+
+
+## Server-side: find the most-aimed Watcher within range + cone + clear line of sight and stun it.
+@rpc("any_peer", "call_remote", "reliable")
+func _net_flash(origin: Vector3, dir: Vector3) -> void:
+	_do_flash_stun(origin, dir)
+
+
+func _do_flash_stun(origin: Vector3, dir: Vector3) -> void:
+	if not Net.is_authority():
+		return
+	var cone := cos(deg_to_rad(phone_flash_angle))
+	var best: Watcher = null
+	var best_dot := cone
+	for n in get_tree().get_nodes_in_group("watchers"):
+		var w := n as Watcher
+		if w == null:
+			continue
+		var to: Vector3 = (w.global_position + Vector3(0, 1.4, 0)) - origin
+		var d := to.length()
+		if d > phone_flash_range or d < 0.01:
+			continue
+		var nd := to / d
+		var dot := dir.dot(nd)
+		if dot < best_dot:
+			continue                          # outside the aim cone (or a better one already found)
+		if _wall_between(origin, w.global_position + Vector3(0, 1.4, 0)):
+			continue                          # flash doesn't punch through walls
+		best = w
+		best_dot = dot
+	if best != null:
+		var dur := phone_stun_duration
+		if best.outage_mult > 1.001:          # bolder in a blackout -> shorter stun
+			dur *= phone_stun_late_mult
+		best.stun(dur)
+
+
+## Clear line of sight between two points (walls = layer 2 occlude the flash).
+func _wall_between(a: Vector3, b: Vector3) -> bool:
+	var world := get_world_3d()
+	if world == null or world.direct_space_state == null:
+		return false
+	var q := PhysicsRayQueryParameters3D.create(a, b)
+	q.collision_mask = 2
+	return not world.direct_space_state.intersect_ray(q).is_empty()
+
+
+func _play_ui_sound(path: String, db: float, pitch := 1.0) -> void:
+	if AudioGen.is_headless():
+		return
+	var s := load(path)
+	if s == null:
+		return
+	var a := AudioStreamPlayer.new()
+	a.stream = s
+	a.volume_db = db
+	a.pitch_scale = pitch
+	add_child(a)
+	a.play()
+	a.finished.connect(a.queue_free)
 
 
 ## Drive the beam on EVERY copy from net_flashlight (so teammates see your light), but never let
@@ -735,7 +1072,6 @@ func _emit_smoke_puff() -> void:
 
 # ---- inventory grants (called by world pickups) -----------------------------
 func give_item(kind: String) -> bool:
-	var prev_melee := held_melee               # what weapon (if any) we held BEFORE this grab
 	match kind:
 		"flashlight":
 			if has_flashlight: return false
@@ -743,157 +1079,44 @@ func give_item(kind: String) -> bool:
 		"phone":
 			if has_phone: return false
 			has_phone = true
+			phone_charges = phone_max_charges  # comes charged
 		"keycard":
 			has_keycard = true
 		"cigs":
 			cigs += 3                          # a fresh pack
 		"battery":
 			flashlight_battery = 1.0
-		"crowbar", "fish":
-			held_melee = kind                  # equip a swingable weapon (replicated)
+			phone_charges = phone_max_charges  # a battery powers BOTH the torch and the phone flash
 		_:
 			return false
-	# Your hands are full: grabbing anything ELSE DROPS the weapon you were holding (so you can
-	# swap crowbar<->fish, or set a weapon down to take a tool) — it lands as a fresh world pickup.
-	if prev_melee != "" and prev_melee != kind:
-		if kind != "crowbar" and kind != "fish":
-			held_melee = ""                    # took a tool -> weapon hand is now empty
-		_drop_weapon(prev_melee, global_position + aim_dir() * 0.9 + Vector3(0, 0.4, 0))
 	picked_up.emit(kind)
 	return true
-
-
-## Drop a weapon back into the world as a grabbable pickup (replicated to everyone).
-func _drop_weapon(weapon: String, pos: Vector3) -> void:
-	if weapon == "":
-		return
-	if Net.is_active():
-		_spawn_drop.rpc(weapon, pos)
-	else:
-		_do_spawn_drop(weapon, pos)
-
-
-@rpc("any_peer", "call_local", "reliable")
-func _spawn_drop(weapon: String, pos: Vector3) -> void:
-	_do_spawn_drop(weapon, pos)
-
-
-func _do_spawn_drop(weapon: String, pos: Vector3) -> void:
-	var model: String = MELEE_MODELS.get(weapon, "")
-	if model == "":
-		return
-	var pk: Node = load("res://scenes/item_pickup.tscn").instantiate()
-	pk.set("kind", weapon)
-	pk.set("model_path", model)
-	pk.set("model_scale", 2.2 if weapon == "fish" else 1.6)
-	pk.set("model_euler", Vector3(0, 0, 90))   # stand it up (long axis is +X)
-	pk.position = pos
-	var host := get_tree().current_scene
-	if host != null:
-		host.add_child(pk)
-
-
-# ---- MELEE: swing a crowbar / fish to bonk teammates down (friendslop) -------
-## Build the weapon viewmodel in your hand (a child of the head so it tracks aim).
-## On the DEFAULT render layer, so YOU see it and so do teammates / the mirror.
-func _rebuild_melee_vm() -> void:
-	if _melee_vm != null:
-		_melee_vm.queue_free()
-		_melee_vm = null
-	if held_melee == "" or _head == null:
-		return
-	var path: String = MELEE_MODELS.get(held_melee, "")
-	if path == "":
-		return
-	var ps := load(path) as PackedScene
-	if ps == null:
-		return
-	var holder := Node3D.new()
-	holder.name = "MeleeVM"
-	holder.position = Vector3(0.28, -0.36, -0.4)    # held bottom-right, CLOSE to the camera
-	holder.rotation = Vector3(0.0, -0.3, 0.0)       # swing animates rotation.x; this is the resting yaw
-	_head.add_child(holder)
-	var m := ps.instantiate() as Node3D
-	# The crowbar/fish meshes are long on +X (lying down) -> rotate +90 about Z so the long axis
-	# points STRAIGHT UP in your fist (like a club), with a slight forward lean.
-	m.scale = Vector3.ONE * (0.9 if held_melee == "fish" else 0.55)
-	m.rotation_degrees = Vector3(10, 0, 90)
-	m.position = Vector3(0, 0.22, 0)                 # raise it up out of the hand
-	holder.add_child(m)
-	_melee_vm = holder
-
-
-## Runs on every copy: animate the swing from the synced attack edge; on the SERVER,
-## resolve a hit (down the player you swung at).
-func _update_melee(delta: float) -> void:
-	if _melee_cd > 0.0:
-		_melee_cd -= delta
-	# Visual swing — trigger on the rising edge of attack_held (synced => all copies swing).
-	if held_melee != "" and attack_held and not _prev_attack_swing:
-		_swing = 1.0
-	_prev_attack_swing = attack_held
-	if _melee_vm != null:
-		_swing = maxf(0.0, _swing - delta * 4.0)
-		var arc := sin(_swing * PI)                 # 0 -> up&over -> 0
-		_melee_vm.rotation.x = -arc * 1.8           # whack down
-		_melee_vm.position.z = -0.4 - arc * 0.22    # rest close; pull back a touch mid-swing
-
-	# Server resolves the hit using the synced attack press + aim.
-	if held_melee != "" and Net.is_authority() and _melee_cd <= 0.0 and consume_attack():
-		_melee_cd = melee_cooldown
-		var victim := _melee_target()
-		if victim != null:
-			victim.down()
-		_melee_fx.rpc(global_position + aim_dir() * 1.2, victim != null)
-
-
-## Nearest LIVING other player in front of us within range — the one we bonk.
-func _melee_target() -> WPlayer:
-	var best: WPlayer = null
-	var bd := melee_range
-	var fwd := aim_dir()
-	for n in get_tree().get_nodes_in_group("players"):
-		var p := n as WPlayer
-		if p == null or p == self or p._downed:
-			continue
-		var to: Vector3 = p.global_position - global_position
-		var d := to.length()
-		if d > bd or d < 0.05:
-			continue
-		if fwd.dot(to / d) < melee_cone:
-			continue
-		bd = d
-		best = p
-	return best
-
-
-@rpc("any_peer", "call_local", "unreliable")
-func _melee_fx(pos: Vector3, hit: bool) -> void:
-	if AudioGen.is_headless():
-		return
-	var path := "res://assets/audio/sfx/button_15.ogg"      # a dull thwack; fish = sloppier later
-	var s := load(path)
-	if s == null:
-		return
-	var a := AudioStreamPlayer3D.new()
-	a.stream = s
-	a.volume_db = 2.0 if hit else -6.0
-	a.pitch_scale = 0.7 if held_melee == "crowbar" else 1.3
-	get_tree().current_scene.add_child(a)
-	a.global_position = pos
-	a.play()
-	a.finished.connect(a.queue_free)
 
 
 # ---- HUD meter readouts (0..1) ---------------------------------------------
 func sprint_ratio() -> float:
 	return clampf(_sprint_budget / maxf(tuning.sprint_max_time, 0.01), 0.0, 1.0)
 
+## True while the burst is spent and hasn't recharged past the minimum needed to start a new
+## sprint — i.e. you're locked out and must wait. The HUD reads this to show the "recharging" tell.
+func sprint_locked() -> bool:
+	return not _was_sprinting and _sprint_budget < tuning.sprint_min_to_start
+
 func stamina_ratio() -> float:
 	return clampf(_stamina, 0.0, 1.0)
 
 func is_downed() -> bool:
 	return _downed
+
+
+## Called by Ladder's ClimbArea when this player enters/leaves it. Local + owner-driven (climbing is
+## movement, like sprint) — no RPC; position is already replicated.
+func enter_ladder(l: Node) -> void:
+	_ladder = l
+
+func exit_ladder(l: Node) -> void:
+	if _ladder == l:
+		_ladder = null
 
 
 ## Server/solo calls down()/revive(); rpc broadcasts the state to every peer.
@@ -949,14 +1172,79 @@ func _set_downed(v: bool) -> void:
 			_downed_overlay.visible = v
 
 
+## A funny, NON-LETHAL shove from a bonk or a thrown item. Movement is owned by the local peer, so
+## route it to the player's owner; the owner's _physics_process bleeds it into velocity (with decay).
+func apply_knockback(impulse: Vector3, stagger := 0.22) -> void:
+	if Net.is_active() and not is_multiplayer_authority():
+		_rpc_knockback.rpc_id(get_multiplayer_authority(), impulse, stagger)
+		return
+	_knockback += Vector3(impulse.x, maxf(0.0, impulse.y), impulse.z)
+	_stagger = maxf(_stagger, stagger)
+	_maybe_drop_from_impact(impulse.length())
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_knockback(impulse: Vector3, stagger: float) -> void:
+	_knockback += Vector3(impulse.x, maxf(0.0, impulse.y), impulse.z)
+	_stagger = maxf(_stagger, stagger)
+	_maybe_drop_from_impact(impulse.length())
+
+
+## Infinite-sprint flag readers use this (held items wobble, the bump system, the HUD).
+func is_sprinting() -> bool:
+	return _was_sprinting
+
+
+## A hard enough hit may knock the cargo out of your hands. Chance-based, weighted by sprint + the
+## item's weight class + fragile, gated by an impact-speed floor and a post-grab grace window. Runs on
+## the holder (who owns held_item), so the drop lands on the right peer.
+func _maybe_drop_from_impact(force: float) -> void:
+	if held_item == null or not is_instance_valid(held_item):
+		return
+	if force < min_impact_speed_for_drop:
+		return
+	if Time.get_ticks_msec() - _grab_time_ms < pickup_drop_grace_ms:
+		return
+	var chance := base_drop_chance
+	if is_sprinting():
+		chance += sprint_drop_bonus
+	if held_item is RecoverableObject:
+		var ro := held_item as RecoverableObject
+		chance += ro.drop_bonus()
+		if ro.fragile:
+			chance += fragile_drop_bonus
+	if randf() < clampf(chance, 0.0, max_drop_chance):
+		held_item.drop()
+
+
+## Shrink the capsule from the top (feet stay on the floor) so you fit under gaps, and squash the
+## visible blob. Camera height ducks in _update_camera_motion.
+func _apply_crouch() -> void:
+	if _capsule != null and _col != null:
+		_capsule.height = lerpf(1.7, 0.95, _crouch_t)
+		_col.position.y = _capsule.height * 0.5
+	if _character != null:
+		_character.set_crouch(_crouch_t)
+
+
 func _physics_process(delta: float) -> void:
 	_update_aim()               # which interactable am I looking at? (authority needs this per-player)
+	if _local or Net.is_authority():
+		_update_aimed_item()    # the grabbable item I'm centred on (HUD prompt + drives the grab)
 	_update_flashlight_visual() # drive the beam on every copy from net_flashlight
 	_set_char_reach(1.0 if interact_held else 0.0)   # gang-beasts arms reach out while interacting
 	if not _local:
 		return                  # remote players are positioned by the synchronizer
+	var was_interact := interact_held
 	interact_held = Input.is_action_pressed("interact") and not input_blocked
+	# Button POKE: jab the hand out (point pose) when you press E on a PRESS interactable.
+	if interact_held and not was_interact and aimed != null and is_instance_valid(aimed) \
+			and aimed.enabled and aimed.interaction_type == Interactable.Kind.PRESS:
+		_poke_start = Time.get_ticks_msec() / 1000.0
+		_poke_point = aimed.global_position
+		_poke_left = randf() < 0.5                    # random hand reaches for it
 	attack_held = Input.is_action_pressed("attack") and not input_blocked
+	throw_held = Input.is_action_pressed("throw") and not input_blocked
 	# Publish our voice amplitude (0 while self-muted) so teammates' copies flap our mouth.
 	net_mouth = 0.0 if VoiceManager.self_muted else VoiceManager.mic_level
 	_publish_net_transform()
@@ -977,35 +1265,65 @@ func _physics_process(delta: float) -> void:
 	_move_activity = iv.length()
 	var has_input := iv.length() > 0.1
 
-	# --- Sprint (panic burst): a stamina-gated speed boost that *widens* your FOV,
-	# so you move faster but cover worse — a real tradeoff, not free speed.
-	# Lugging a capacitor disables the sprint (your hands are full and it's heavy).
-	var sprinting := false
-	if Input.is_action_pressed("sprint") and has_input and carrying == null:
-		var threshold := 0.0 if _was_sprinting else tuning.sprint_min_to_start
-		if _sprint_budget > threshold:
-			sprinting = true
-			_sprint_budget = maxf(0.0, _sprint_budget - delta)
-	if not sprinting:
-		_sprint_budget = minf(tuning.sprint_max_time,
-			_sprint_budget + tuning.sprint_recharge * delta)
+	# --- Crouch (hold Ctrl): duck the camera, shrink the capsule, squash the blob in half ---
+	var crouch_target := 1.0 if (Input.is_action_pressed("crouch") and not input_blocked) else 0.0
+	_crouch_t = move_toward(_crouch_t, crouch_target, delta * crouch_lerp)
+	net_crouch = _crouch_t
+	_apply_crouch()
+
+	# --- Sprint (panic burst): INFINITE — no stamina gate, sprint whenever you're moving. The FOV still
+	# widens (you move faster but cover worse), and the CONSEQUENCE of sprinting is physical chaos
+	# (object instability / player bumps), handled elsewhere — not a tiredness meter.
+	# Lugging a two-handed capacitor still blocks it (your hands are full).
+	var sprinting := Input.is_action_pressed("sprint") and has_input and carrying == null
 	_was_sprinting = sprinting
+	_sprint_budget = tuning.sprint_max_time      # pinned full so any legacy reader sees "never locked"
 
 	var speed := tuning.walk_speed * (tuning.sprint_multiplier if sprinting else 1.0)
+	speed *= lerpf(1.0, crouch_speed_factor, _crouch_t)   # crouch-walk is slower
 	if carrying != null:
 		speed *= capacitor_carry_slow      # heavy maintenance haul — you're slow and exposed
 	var dir := (transform.basis * Vector3(iv.x, 0.0, iv.y)).normalized()
-	var target := dir * speed
+	# While staggered (just got bonked) you barely control your feet — the knockback carries you.
+	var target := dir * speed * (0.25 if _stagger > 0.0 else 1.0)
 	# Asymmetric accel/decel gives a touch of weight: snappy to start, softer to stop.
 	var rate := tuning.acceleration if has_input else tuning.deceleration
 	velocity.x = move_toward(velocity.x, target.x, rate * delta)
 	velocity.z = move_toward(velocity.z, target.z, rate * delta)
+	# Jump (Space): a pop off the floor when standing. Gravity then brings you down.
+	var grounded := is_on_floor()
+	if _ladder != null and not _downed and not input_blocked and is_instance_valid(_ladder):
+		# LADDER CLIMB: gravity off; W/S drive you up/down. You're STUCK to the ladder's front
+		# centre-line (so it grips like a real ladder, not floaty), and jump hops you off. Reaching the
+		# top: keep holding W and you rise above the climb volume → exit → land on the ledge.
+		var lad := _ladder as Node3D
+		var face: Vector3 = lad.global_transform.basis.z       # ladder's front (toward the climber)
+		var stand := lad.global_position + face * ladder_stand_dist
+		var to := stand - global_position
+		to.y = 0.0
+		velocity.x = to.x * 8.0                                 # spring onto the centre-line
+		velocity.z = to.z * 8.0
+		velocity.y = Input.get_axis("move_back", "move_forward") * ladder_climb_speed   # W up, S down
+		if Input.is_action_just_pressed("jump"):
+			velocity = face * 3.5 + Vector3.UP * 2.5            # hop off the ladder
+			_ladder = null
+	elif grounded and _crouch_t < 0.5 and Input.is_action_just_pressed("jump") and not input_blocked:
+		velocity.y = jump_force
+		grounded = false               # so the floor-snap below doesn't eat the jump
 	# Gravity so stairs / the second floor / ledges work. (Stairs are a smooth ramp
 	# collider, so plain move_and_slide climbs them — no step-assist hacks needed.)
-	if is_on_floor():
+	elif grounded:
 		velocity.y = -2.0          # small downward bias keeps us snapped to slopes
 	else:
 		velocity.y -= tuning.gravity * delta
+	# KNOCKBACK (bonk / thrown item): a decaying shove added AFTER gravity so an upward pop survives
+	# the floor-snap. Funny, never lethal — it just pushes you around.
+	velocity.x += _knockback.x
+	velocity.z += _knockback.z
+	velocity.y += _knockback.y
+	_knockback = _knockback.move_toward(Vector3.ZERO, delta * 16.0)
+	if _stagger > 0.0:
+		_stagger = maxf(0.0, _stagger - delta)
 	move_and_slide()
 
 	# Sprint widens the FOV slightly (you cover a worse cone while bursting).
@@ -1014,16 +1332,27 @@ func _physics_process(delta: float) -> void:
 
 	_update_camera_motion(delta, iv, speed, sprinting)
 
+	# Visual-only body lean toward movement. Uses post-slide velocity in LOCAL space; never rotates
+	# the CharacterBody3D itself (this tilts the rig child only), so collision/camera are untouched.
+	if _character != null:
+		var lvel := global_transform.basis.inverse() * velocity
+		lvel.y = 0.0
+		_character.set_movement_lean(lvel / maxf(tuning.walk_speed, 0.1), delta)
+		_character.set_look_pitch(_pitch)      # blob tilts its head with your look (seen in mirror/by teammates)
+
 
 func _update_camera_motion(delta: float, iv: Vector2, speed: float, sprinting: bool) -> void:
 	_breath_t += delta
 	# Low blink-stamina makes the view breathe harder — movement feeds the dread.
 	var strain := 1.0 + (1.0 - _stamina) * 0.4
+	# Crouch ducks the camera toward crouch_eye_factor of standing eye height.
+	var eh := tuning.eye_height * lerpf(1.0, crouch_eye_factor, _crouch_t)
 	if iv.length() > 0.1:
 		var freq := tuning.bob_frequency * (speed / maxf(tuning.walk_speed, 0.1))
 		_bob_t += delta * freq * TAU
 		var amp := tuning.bob_amplitude * strain * (1.3 if sprinting else 1.0)
-		_head.position.y = tuning.eye_height + sin(_bob_t) * amp
+		_head.position.y = eh + sin(_bob_t) * amp
 	else:
-		var idle := tuning.eye_height + sin(_breath_t * 1.6) * tuning.breath_amplitude * strain
-		_head.position.y = lerp(_head.position.y, idle, delta * 6.0)
+		var idle := eh + sin(_breath_t * 1.6) * tuning.breath_amplitude * strain
+		# Track the crouch height quickly (crouch_t already smooths the duck) so the camera isn't laggy.
+		_head.position.y = lerp(_head.position.y, idle, clampf(delta * 14.0, 0.0, 1.0))

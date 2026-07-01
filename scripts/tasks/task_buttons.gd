@@ -23,6 +23,10 @@ var _step := 0
 func _build() -> void:
 	if is_default_title():
 		task_title = "Key in the control sequence"
+	task_category = &"puzzle"
+	puzzle_task = true
+	difficulty = 2
+	estimated_duration = 6.0
 	# A slim dark backplate the buttons sit on (no monitor/console fixture).
 	var plate := make_box(Vector3(1.3, 1.0, 0.12), Color(0.1, 0.1, 0.12))
 	plate.position = Vector3(0, 1.25, -0.12)
@@ -31,7 +35,7 @@ func _build() -> void:
 	# The button panel, mounted vertically so the caps face the player (+Z).
 	var glb := make_model(model, Vector3(1.2, 0.6, 0.1), Color(0.1, 0.1, 0.12), model_scale)
 	glb.position = Vector3(0, 1.25, 0.0)
-	glb.rotation_degrees = Vector3(-90, 0, 0)   # flat panel -> upright, caps poke toward +Z
+	glb.rotation_degrees = Vector3(0, 0, 0)   # flat panel -> upright, caps poke toward +Z
 	add_child(glb)
 
 	# Grab the four meshed caps and wrap each in its own targetable hit-box.

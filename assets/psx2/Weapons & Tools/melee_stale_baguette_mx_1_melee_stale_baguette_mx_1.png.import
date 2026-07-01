@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bbp6dfas7ltnr"
-path="res://.godot/imported/melee_stale_baguette_mx_1_melee_stale_baguette_mx_1.png-745e17675adbb9a9c5818198bf4dfbd2.ctex"
+path.s3tc="res://.godot/imported/melee_stale_baguette_mx_1_melee_stale_baguette_mx_1.png-745e17675adbb9a9c5818198bf4dfbd2.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c04893a22b222b8cf2481edf87baa26f"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx2/Weapons & Tools/melee_stale_baguette_mx_1_melee_stale_baguette_mx_1.png"
-dest_files=["res://.godot/imported/melee_stale_baguette_mx_1_melee_stale_baguette_mx_1.png-745e17675adbb9a9c5818198bf4dfbd2.ctex"]
+dest_files=["res://.godot/imported/melee_stale_baguette_mx_1_melee_stale_baguette_mx_1.png-745e17675adbb9a9c5818198bf4dfbd2.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

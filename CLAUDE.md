@@ -1,175 +1,213 @@
 # WATCHERS — Project Guide
 
-> First-person co-op horror prototype. Figures creep toward you **only while you aren't looking at them.**
-> Look at one → it freezes. Secure 3 relays to escape while covering 360° of dark with one viewport.
-> **Status: Week-1 greybox. Core gaze-freeze loop in, headless-clean, lighting tuned for visibility. Confirmed FUN by the dev.**
-> **Update: panic-loop systems added (blink/stamina, procedural audio, danger vignette) + project restructured into separate scenes with a main/pause/options menu flow and a remappable Input Map.**
-> **Update 2 (co-op pivot): Resource-driven movement (`MovementTuning`) with sprint burst; bigger HOUSE level with only 1–2 watchers; reusable `Task` architecture (relay / carry-vase / switch-sequence); emote/meme button; a LOBBY warm-up scene; flow is menu → lobby → game. Many feel-values moved from `const` to `@export`/Resource so they're editor-editable.**
-> **Update 11 (FROM-SCRATCH BUNKER LEVEL + full asset palette + physical tasks + dev screenshot loop): Extracted the REST of the bought packs (they were the "all the assets" the dev meant): `assets/psx2/` (PSX Mega Pack II, 549 GLBs incl. Modular Structures + Buildings warehouse/garage/shed + Machinery), `assets/bunkers/` (83 — TUNNEL KIT: tunnel_straight/junction_four_way/three_way/ancle, blast_door, computer, pipes), `assets/tech/` (63 control-panel buttons), `assets/nature/` (49 trees/grass/ferns), `assets/van/` (kidnapper's van). ~1279 GLBs total imported. NEW PLAYING AREA built FROM SCRATCH: `scenes/bunker.tscn` (`tools/build_bunker.gd`) — a 3×3 grid of 4-way junction ROOMS linked by straight TUNNELS on a 12m grid (hub 6 + straight 6), perimeter openings capped with walls, dim cold bunker lights per room, dressed with crates/pipes/computer, all REAL authored draggable nodes; collision is BAKED TRIMESH straight from each piece's mesh (exact, no box-alignment guessing) + a safety floor box. Marker names (PlayerSpawn/WatcherSpawn/TaskSlot0-5) preserved so `game.gd` is unchanged except `HOUSE_SCENE` now preloads `bunker.tscn`. DELETED `house.tscn` + the old textured-box house approach (build_house.gd left as dead tool). Looks like a real facility — verified by screenshot. LOBBY enlarged (ROOM 12→18, CEIL→6, more lights) + dressed with the VAN + crates/sofa/table/shelf (was a cramped box). PHYSICAL TASKS (Gang-Beasts feel, using replicated `interact_held`): switches→`SwitchSequenceTask` HOLD-to-yank LEVERS that swing on a pivot + spring back, pull in order; relay→`RelayTask` HOLD-to-CRANK a spinning wheel that bleeds back down when you let go; carry→`CarryTask` HOLD-to-drag with heavy spring SWAY, release=drop. Interaction SFX via `Task.play_sfx`. FOOTSTEPS: `player.gd` distance-cadenced spatial `footstep_wood_a_*` on every copy. MIRROR: SubViewport reflection PROVEN to render (dumped its texture = correct room view); material now double-sided + build-time bound. NOTE: the dev screenshot harness (`tools/shot.gd`, custom SceneTree main loop) does NOT composite SubViewport textures onto materials, so the mirror reads black IN THE HARNESS ONLY — needs a live F5 check. DEV TOOLS added: `tools/shot.gd` (instance a scene, optional `cam=x,y,z look=x,y,z`, save PNG — use to SEE the game), `tools/measure.gd` (print model AABBs for modular grids). EDITOR-AUDIO (dev hears nothing in editor, fine in .exe): confirmed NOT a project bug — no muted bus, no editor_settings audio override, audio driver inits clean on a normal run. It's OS-level: Windows **Volume Mixer** has Godot/the run-child muted, or wrong default output device. All scenes verified headless = 0 errors.**
+> **First-person co-op horror / friendslop.** Figures creep toward you **only while no one is looking at them** — look at one and it freezes; look away and it advances. Cover 360° of dark between you, complete the facility's tasks, and escape. Tagline: **"Don't Blink."**
+>
+> **Premium, one-time purchase** ($9.99 target). No live-service / battlepass / gacha / ads / pay-to-win. Cosmetics/maps/modifiers only — never power.
+>
+> **Status:** playable prototype. All boot scenes are headless-clean (0 script errors). Core gaze-freeze loop, bunker level, 12 tasks, outage system, blob player + detached hands, physics items, and an ENet co-op foundation are all in. The work now is consolidation + polish, not new pillars.
 
-> **Update 10 (POLISH PASS pt.2 — house actually uses PSX, task clarity, mirror, editor-tunable): HOUSE NOW USES THE ASSETS — `build_house.gd` regenerated `house.tscn` (262 nodes) with REAL PSX furniture baked in as draggable nodes (`_furn` = GLB visual + box collider you collide with; `_deco` = decor-only): sofa/coffee table/tv stand/chairs/shelves/cabinets/beds/wardrobes/bedside tables (PSX) + Fridge/Stove/Bathtub/Toilet (FBX, PSX lacks them) + foyer supply crates as choke-point cover + PSX ceiling-lamp models under each light + cobweb decals in corners. Removed the old eyeballed `game.gd::_build_props`. Re-run the generator to regen (don't hand-edit then regen). TASK CLARITY — every `Task` now spawns a floating BEACON (name Label3D + light-shaft, `task.gd::_build_beacon`, hidden on done) so players see WHERE/WHAT; tasks got real titles (\"Charge the relay\", \"Flip the breakers\", \"Carry the fuse to the box\"); `hud.gd` now draws a readable OBJECTIVE LIST (Cinzel, `N/M` count + per-task `[x]/[%]` + progress bar) instead of anonymous pips. LOBBY MIRROR — full-wall planar-reflection mirror (`lobby.gd::_build_mirror`/`_update_mirror`): a SubViewport (`world_3d` = lobby world) with a camera reflected across the glass each frame, shown on a quad (UV-flipped); the mirror SURFACE is on render-layer 19 (cam excludes → no feedback). SELF-VISIBILITY FIX so you can see your OWN body in the mirror: `player.gd` no longer hides the local rig with `visible=false`; instead `PlayerCharacter.set_first_person_layer()` puts your body on render-layer 20 and your own `cam.cull_mask` excludes it — other cameras (the mirror) still draw it. Lobby also dressed with PSX deco. EDITOR-TUNABLE — converted feel consts to `@export` on `watcher.gd` (MOVE_SPEED/CATCH_DIST/SEP_*/creep_accel/eye colours/skitter), `character_rig.gd` (eye/mouth/blink/sway), `lobby.gd` (ROOM/CEIL/throw/grab/etc). WATCHER feel — eases into motion via `creep_accel` ramp (`_cur_speed`) so it lunges, not teleports. AUDIO-IN-EDITOR: NOT a project bug (no muted bus exists; that's why the .exe is fine) — it's editor-local: Editor Settings▸Audio▸Output Device=Default, OR Windows mic permission blocking `enable_input` init in the editor (test by toggling `audio/driver/enable_input=false`). All scenes + MP host path verified headless = 0 errors.**
-
-> **Update 9 (POLISH PASS pt.1 — real assets imported + expressive characters + UI/atmos): KEY DISCOVERY — the "absurd amount of assets" the dev bought were sitting UNEXTRACTED in `C:\Users\Manu\Downloads` (zips/rars), NOT in the project. Extracted+imported a curated set into `assets/`: **PSX Mega Pack** (489 GLBs — `assets/psx/<Furniture|Modular Structures|Lighting|Items & Weapons|Large/Small Props|Electronics & Misc|Decals>/*.glb`; GLB embeds textures so import is clean), **Modular Retro FPS Kit** (44 GLBs `assets/fpskit/` incl. `button_on/off`, columns, floors, stairs, tunnels — for tactile tasks), **Cinzel** serif fonts (`assets/fonts/*.otf`), curated audio (`assets/audio/{ambience,sfx,ui}/*.ogg` from ROT Horror + Echoes kits). 851 assets imported clean. NEW PLAYER CHARACTER (Content-Warning/REPO vibe): `scripts/character_rig.gd` (class_name `PlayerCharacter`) + `actors/player/character.tscn` — a goofy big-eyed potato guy, flat PSX materials, big UNSHADED eyes (readable in dark) w/ jitter+blink, voice-driven mouth, stubby arms, per-player tint. `systems/voice_face_driver.gd` (class_name `VoiceFaceDriver`) maps `WPlayer.net_mouth` (replicated mic amplitude, 0 while self-muted) → jaw flap w/ attack/release smoothing; scream→eyes widen, downed→dead eyes. `player.gd` now instances the rig as `_body`/`_character` (replaced capsule+sphere); added `net_mouth` to the MultiplayerSynchronizer; remotes waddle from net_pos catch-up. You can tell who's talking with NO UI. FPS UNCAPPED (`project.godot`: `run/max_fps=0`, `window/vsync/vsync_mode=0`; still toggleable in Options). "Weird black lines" fix: `msaa_3d=2` (4×) + `use_nearest_mipmap_filter=true` + anisotropy 0 (PSX crunch + kills tiled-texture moiré at grazing angles; if lines persist they're coplanar z-fighting in the code-built house → fixed by the modular rebuild). UI GLOW-UP: `menu_ui.gd` now uses Cinzel (Decorative-Black title, Bold buttons), framed `card()` panel w/ accent spine, hover/click SFX (`gui_click_*`) on every button; main/pause/options use the card. Ambient horror bed loops under gameplay (`game.gd` `_ambient` = `ambience_nightmares_mx_1`). All scenes (menu/game/lobby) verified headless = 0 errors. STILL TODO (next pass, dev chose FULL MODULAR REBUILD): tear out code-built `house.gd` slabs → reassemble from PSX `Modular Structures` GLBs (walls/doorways/windows/stairs) w/ own collision + re-bake navmesh; dense intentional prop placement (use `assets/psx`); revamp lobby w/ real props; Gang-Beasts-style PHYSICAL tasks (grab/drag/crank/lever using FPS-kit `button`/valves); footstep + interaction SFX; watcher AI/pathing polish.**
-
-> **Update 8 (STAIRS FIXED + voice + physics lobby): STAIRS finally work — diagnosed via an automated headless test (`scenes/test_stairs.tscn`): it was NOT collision (steps were layer 2, player mask 2) — the stacked-box step colliders + fragile test_move step-assist jammed the player. FIX: visible stepped MESH (no collision) + a smooth RAMP COLLIDER underneath; plain `move_and_slide` climbs it (verified player Y 0→3.5). Step-assist removed. Floor handling now editor-tunable (`MovementTuning`: floor_snap_length/floor_max_angle_deg/floor_stop_on_slope; walk 4.0, accel 28). PROXIMITY VOICE CHAT (`scripts/voice.gd`, per-player): local mic → `AudioEffectCapture` on a "Mic" bus → RPC frames → spatial `AudioStreamGenerator` `AudioStreamPlayer3D` (distance = proximity). `audio/driver/enable_input=true`. NETWORKED PHYSICS LOBBY (`lobby.gd` rewritten): Host/Join now go menu→LOBBY→(START)→game; players spawn together; throwable RigidBody balls + a BAT (server-simulated, synced; clients frozen+kinematic). E=grab/drop, Left-click(`attack`)=throw/swing; bat swing DOWNS players in front (auto-recover 4s in lobby). All verified host+client headless = 0 errors (mic/physics interactions need live test).**
-> **Update 7 (real assets): WATCHER is now the PS1 **Biblically Accurate Angel** (`assets/models/angel/...obj`) rendered as a dark silhouette (eye-tell intact). PSX **furniture** (9 FBX: Couch/TV/Fridge/Stove/Dresser/SingleBed/Toilet/Bathtub/FloorLamp under `assets/models/furniture/`) placed in the house via `game.gd::_build_props()` (decor, no collision, eyeballed transforms — tweak in editor). PSX **car** in lobby. Extracted with WinRAR's UnRAR; the angel `.mtl` had the author's absolute texture paths (stripped `map_Kd` so import is clean). Medieval kit still `.blend` (skipped). All assets imported clean; solo + 2-peer headless verified 0 errors.**
-> **Update 6 (co-op playable): players now have VISIBLE bodies (capsule on `BODY_LAYER`, hidden from own cam) so friends see each other + each other's emotes. NETWORKED TASK INTERACTION — clients can do carry/switch tasks too (player `consume_interact()` press intent via `_interact_rpc` to server; tasks loop group "players"). DOWNED + REVIVE — a watcher catch now DOWNS the nearest living player (tips over + "REVIVE (hold E)" Label3D + red overlay) instead of instant game-over; a teammate holds E nearby for `REVIVE_TIME` (3s) to revive (server reads replicated `interact_held`); lose only when ALL players are downed. Solo unchanged (down = instant lose). Verified host+client 2-peer headless = 0 errors.**
-> **Update 5 (multiplayer + fixes): HOSTING WORKS — `Net` autoload (ENet, `scripts/net.gd`); main menu has Play(Solo)/Host Co-op/Join by IP. Verified host+client connect + replicate (players sync position/aim/emote via `MultiplayerSynchronizer`; watcher server-authoritative + synced; server owns tasks/win-lose). For cross-network: host port-forwards UDP 24545 (or everyone uses a ZeroTier VPN). Launch flags `-- --host` / `-- --join` for testing. Stairs FIXED (solid steps + player step-assist `_move_with_stairs`). Watcher pathfinding REVERTED to direct movement (it moves again). Slightly darker. Bigger house (80×60, 9 rooms, 6 tasks). PSX car asset (`assets/models/car/Car8.obj`) placed in lobby. KNOWN v1 GAPS: client task-interaction not networked yet (host does interact-tasks; relays work for all via synced gaze); no downed/revive; no voice chat; lobby not yet networked. `.rar` packs (angel/furniture) need extraction (no unrar here); medieval kit is `.blend` (needs Blender).**
-> **Update 4 (editor-editable + AI/lighting): the house is now an AUTHORED scene — `scenes/house.tscn` is real, draggable nodes (walls/floors/lights/furniture/`Marker3D` spawns/`NavigationRegion3D`), generated once by `tools/build_house.gd` (a one-time builder; don't re-run it after you hand-edit). `game.gd` loads it, bakes the navmesh, and spawns player/tasks/watcher at the named markers. Stairs fixed (flush no-lip ramp through a gap in both floor slabs). ONE watcher now, and it PATHFINDS via NavMesh (no wall-phasing). Brighter lighting + bright lamps over each task room. Emote split: YOU see `povmiddlefinger.png` (screen overlay), everyone else sees the world billboard (render-layer trick). NEXT (not yet built): ENet host/join netcode → physics lobby (throw/bat/grab) → downed+revive → proximity voice chat.**
-> **Update 3 (proper house): two-floor mansion (`house.gd`/`house.tscn`) — ground rooms + central hall + ramp staircase through a hole in the mid-slab + second-floor bedrooms + flat roof + furniture + easter eggs (shrine/duck/sign). Player now has GRAVITY (stairs/ledges work); the second floor is a refuge (watchers are height-gated — no catch/scare from another level). Emote is now a WORLD-SPACE billboard (`Sprite3D`, everyone sees it, hold-to-show, no fade) using `assets/emotes/middlefinger.png`. Mouse sensitivity fixed (persistent `sens_multiplier`, no longer reset on spawn). Lobby expanded: kickable physics balls, strobing disco floor, a BONK dummy, slots, signage.**
-
-> Sibling concept **DEEP POCKETS** was prototyped and **dropped** — it had no true objective (just "don't lose your loot"), which felt hollow. WATCHERS won because the relays give a real win condition. Project still exists at `C:\Users\Manu\Documents\deep-pockets` but is not being pursued.
+This file is the **source of truth for the current state**. It replaces the old stacked "Update N" changelog (which described a house/3-relays/potato-rig era that no longer exists). Git history has the changelog if you need it.
 
 ---
 
-## 1. How to run
-- Open in **Godot 4.6**, press **F5**. Main scene is now `res://scenes/main_menu.tscn` — the menu loads first; click **Play** to enter `res://scenes/game.tscn`.
-- Terminal (editor):
-  ```
-  & "C:\Users\Manu\Downloads\Godot_v4.6.1-stable_win64.exe\Godot_v4.6.1-stable_win64.exe" --path "C:\Users\Manu\Documents\watchers"
-  ```
-- Headless smoke test (after one `--import` pass that registers `class_name`s). The default boot is the menu, so point the test at the **gameplay** scene to exercise player/watchers/relays/audio:
-  ```
-  & "C:\Users\Manu\Downloads\Godot_v4.6.1-stable_win64.exe\Godot_v4.6.1-stable_win64_console.exe" --headless --path "C:\Users\Manu\Documents\watchers" res://scenes/game.tscn --quit-after 200
-  ```
-  Clean = engine banner only. `SCRIPT ERROR` lines = something to fix. **Run this after any code change before assuming it works.**
-  - Note: audio is procedural (built in code, no assets) and is **skipped under `--headless`** on purpose — the dummy audio driver can't output sound and force-quit would otherwise leak active playbacks. See `AudioGen.is_headless()`.
+## 1. How to run & validate
 
-Engine: **Godot 4.6, Jolt Physics, Forward+, D3D12.**
+- **Engine:** Godot **4.6** (Jolt Physics, Forward+, D3D12). Project root: `C:\Users\Manu\Desktop\w`.
+- **Play:** open the project, press **F5**. First scene is `res://scenes/main_menu.tscn` → **Play** → lobby → (step into the elevator, press **E**) → `res://scenes/game.tscn` (the bunker).
+- **Editor from terminal:**
+  ```
+  & "C:\Users\Manu\Downloads\Godot_v4.6.1-stable_win64.exe\Godot_v4.6.1-stable_win64.exe" --path "C:\Users\Manu\Desktop\w"
+  ```
+- **Headless smoke test** (run after ANY code change — clean = no `SCRIPT ERROR`/`Parse Error` lines). On a fresh machine do one `--import` pass first so `class_name`s register:
+  ```
+  GODOT="C:\Users\Manu\Downloads\Godot_v4.6.1-stable_win64.exe\Godot_v4.6.1-stable_win64_console.exe"
+  & $GODOT --headless --path "C:\Users\Manu\Desktop\w" res://scenes/game.tscn --quit-after 150
+  ```
+  Validate `res://scenes/main_menu.tscn`, `res://scenes/lobby.tscn`, and `res://scenes/game.tscn` after edits. Loading `lobby`/`game` transitively exercises `player.tscn`, the items, the hands, and the watcher.
+  - **Expected harmless noise at exit:** under `--headless` the dummy renderer reports `RID allocations … leaked at exit` / `ObjectDB instances leaked` — this is force-quit teardown of code-built materials/textures, NOT a bug. Only `SCRIPT ERROR`/`Parse Error` matter.
+  - Audio one-shots are **skipped under headless** on purpose (`AudioGen.is_headless()`); the dummy driver can't play and would leak active playbacks.
+- **Visual checks** (mirror, hands, lighting) need a **real F5 run** — headless can't show them. `tools/capture.gd` + `tools/capture.tscn` boot the lobby and save the first-person view (incl. hands) to a PNG: `godot --path . res://tools/capture.tscn`.
 
 ---
 
-## 2. Controls
-All bindings live in the **Input Map** (`project.godot`) and are remappable later.
-| | |
-|---|---|
-| Move | **WASD** / arrows (`move_forward/back/left/right`) |
-| Look | **Mouse** (captured during play) |
-| Sprint (panic burst) | **Shift** (`sprint`) — faster but **widens FOV** (you cover worse), stamina-gated |
-| Interact | **E** (`interact`) — LOOK AT an object (button/lever/valve/capacitor/keycard reader/red button/item) and press/hold E. Also revive, START in lobby |
-| Flashlight | **G** (`flashlight`) — toggle the battery-limited torch (essential in the dark / during outages) |
-| Throw phone | **V** (`throw_phone`) — one-time cellphone stun: hurl it at the watcher (the late-game counter once it's angry) |
-| Smoke | **C** (`smoke`) — light a cigarette: **purely comedic**, available any time (cig in view + drifting smoke, no gameplay effect) |
-| Emote (meme) | **HOLD F** (`emote`) — shows a middle finger **in the world in front of you** (everyone sees it) + vine boom. Visible while held. |
-| Charge a relay | just **look at it** while standing within range (gaze IS the action) |
-| Pause / resume | **Esc** (`pause`) — opens the pause menu, frees the mouse (in lobby: back to main menu) |
-| Restart | **R** (`restart`) |
+## 2. Identity & design pillars (locked)
 
-No weapons. **Your gaze is the only tool.** Look at a figure to freeze it; look away and it advances.
-A soft **headlamp** is mounted on the camera, so you can always see roughly where you're looking — the periphery stays dark on purpose.
-You also **can't keep your eyes open forever**: a stamina meter drains toward a forced **blink** (brief eyes-shut), and it drains *faster while you stand still and camp one angle* — so the game keeps pushing you to reposition and hand off your coverage.
+- **Verb: cover your angle.** The horror is the *handoff* — you must look away to move/work, and that's when the figures move. Co-op divides the angles.
+- **First-person is mandatory** — the viewport *is* the mechanic.
+- **Funny + scary (friendslop).** Goofy blob bodies, detached cartoon hands, physics props you grab/throw/swing, an emote button. Lobby weapons are **knockback-only, never lethal**.
+- **Luxury-hotel lobby → descent → industrial bunker.** The lobby is warm/fancy/slightly cursed; the bunker is oppressive PSX/retro horror.
 
 ---
 
 ## 3. The core rule (the whole game)
-A figure is **frozen** when its eye is **inside the camera frustum AND has clear line-of-sight** (a wall breaks the gaze). See `watcher.gd::_is_observed()` — uses `Camera3D.is_position_in_frustum()` + a wall-only raycast. Gives the fair, legible rule: **"if I can see it, it's frozen."**
 
-**Readable tell:** frozen eye = calm **blue**, moving eye = hot flickering **red**. In the gloom that's an instant wordless panic signal.
+A figure is **frozen** while **any** player has its eye inside a view cone (on the player's *synced aim*) **with clear line-of-sight** (a wall breaks the gaze). See `watcher.gd::_observed_by_any()` — a dot-product cone (~47°) + a wall-only raycast, run for every player. Using the synced aim (not a live `Camera3D` frustum) makes the freeze identical for the host and every client, so there's no proxy-camera desync in co-op.
 
----
+**Readable tell (the eye is a separate mesh inside the angel's rings):** calm **blue** = frozen/watched, hot flickering **red** = moving, cold white-blue pulse = phone-stunned. One wordless panic signal across a dark room.
 
-## 4. Architecture (code-built greybox, split into scenes, editor-tunable)
-**Hybrid scenes:** each entity/task/menu is its own instantiable `.tscn` (trivial: root node + script; the script builds its greybox children in code). **Feel-values are now `@export`/Resource, not `const`** — editable in the Inspector without digging through scripts (per the editor-friendly direction). `player.tscn` carries a `MovementTuning` resource + the emote texture; `game.tscn`'s root exposes room/threat/lighting/heartbeat `@export` groups.
-```
-scenes/
-  main_menu.tscn          Control + main_menu.gd. FIRST scene loaded (Play→lobby / Options / Quit).
-  lobby.tscn              Node3D + lobby.gd. Bright warm-up room (no blink/headlamp); START pad, slots,
-						  BONK dummy, disco floor, kickable physics balls, signage.
-  game.tscn               Node3D "Game" + game.gd. The gameplay scene; instantiates the House.
-  house.tscn              Node3D (House) + house.gd. The 2-floor mansion (geometry + room lights + anchors).
-  entities/
-	player.tscn           CharacterBody3D (WPlayer) + player.gd  [tuning + emote_texture(png) assigned].
-	watcher.tscn          CharacterBody3D (Watcher) + watcher.gd.
-  tasks/
-	task_relay.tscn       Node3D (RelayTask)  — gaze-charge.
-	task_carry.tscn       Node3D (CarryTask)  — carry vase to a drop zone.
-	task_switches.tscn    Node3D (SwitchSequenceTask) — press numbered switches in order.
-  ui/
-	pause_menu.tscn / options_menu.tscn   CanvasLayer + scripts.
-scripts/
-  game.gd       ORCHESTRATOR. Instantiates the House; spawns player (at `house.player_start`) + watchers +
-				task scenes (at `house.task_anchors`); HUD task-checklist, danger vignette, heartbeat, pause,
-				win(=all tasks)/lose. @export: Threat (watcher_count/spawn_ring/danger_range), Lighting/Heartbeat.
-  house.gd      (House) Builds the mansion: slabs (ground/mid-with-stair-hole/roof), perimeter + interior
-				walls w/ doorways, ramp staircase, second-floor rooms, lights, furniture, easter eggs.
-				Exposes `task_anchors` + `player_start`. Dims (`half_x/half_z/floor_h`) are @export.
-  lobby.gd      Bright pre-game scene + toys (balls/disco/bonk/slots). Spawns player with blink off; START → game.
-  player.gd     WPlayer. Resource-driven movement (accel/decel + sprint burst + GRAVITY for stairs), mouse-look
-				(`tuning.mouse_sensitivity * sens_multiplier`), head-bob/breath, headlamp, BLINK overlay,
-				EMOTE (world-space `Sprite3D` billboard, hold-to-show). Exposes `cam`. Joins group "players".
-  watcher.gd    The creeping figure. Observation check, creep-when-unseen, catch, eye tell, skitter audio.
-  tasks/task.gd (Task) BASE CLASS. Self-driving: finds players via group "players", emits `completed`/
-				`progress_changed`. Subclass overrides `_build()` + `_task_process()`. Greybox mesh helpers.
-  tasks/task_relay.gd, task_carry.gd, task_switches.gd   concrete tasks.
-  resources/movement_tuning.gd  (MovementTuning : Resource) all movement feel as @export. .tres in /resources/movement.
-  audio_gen.gd  (AudioGen) Static DSP — heartbeat / skitter / vine_boom AudioStreamWAVs built in code.
-  ui/menu_ui.gd + ui/{main_menu,pause_menu,options_menu}.gd
-assets/emotes/middle_finger.svg   placeholder emote art (SVG → texture).
-resources/movement/default_movement.tres   the default MovementTuning profile.
-```
-**Flow:** main menu → **Play → lobby** → (stand on START, press E) → **game**. In-game **Esc** flips `get_tree().paused` + pause menu (`process_mode = ALWAYS`); lobby **Esc** → main menu. Options overlay is reachable from main + pause menus; emits `closed` (no global manager).
-
-**Task contract (the reusable spine):** a `Task` is a self-contained scene. It finds players via the `"players"` group, updates itself each frame, and emits `completed(task)`. `game.gd` just instantiates task scenes at room positions, connects `completed`, and wins when all `counts_toward_win` tasks are done. Adding a new task = new script extending `Task` + a trivial `.tscn`; no changes to `game.gd` required beyond placing it. This is why co-op is additive — tasks don't care *who* acts.
+**Escalation:** a **phone camera-flash** stuns it solid (hard counter — a limited-use tool, see §6, NOT a throwable); a power **outage** makes it ignore your gaze and keep coming; a long-run **anger** timer (`anger_time`) eventually lets gaze only slow it. (Note: `anger_time` defaults very high — see Known Issues.)
 
 ---
 
-## 5. Tuning cheat-sheet (symptom → knob → file)
-| Symptom | Knob | File |
+## 4. Main scenes & flow
+
+```
+main_menu.tscn   Control + ui/main_menu.gd. First scene. Instances lobby.tscn as a live 3D backdrop
+                 (backdrop_mode). Play → lobby ; Host Game / Join by IP → ENet session.
+lobby.tscn       Node3D + lobby.gd. AUTHORED luxury-hotel warm-up room (191 nodes, hand-edited).
+                 Spawns players (blink off), drives the mirror, runs the elevator-start + descent → game.
+game.tscn        Node3D "Game" + game.gd (config = default_game.tres, instances bunker.tscn). The gameplay
+                 orchestrator: spawns players/watchers, wires tasks, power/outage, HUD, audio, pause.
+bunker.tscn      Node3D + (generated by tools/build_bunker.gd). AUTHORED facility (~2123 nodes): rooms +
+                 tunnels, baked-trimesh collision, a Nav region, dim cold lights, dressed with PSX props,
+                 12 task instances, named markers (PlayerSpawn / WatcherSpawn). Edit in the editor.
+entities/player.tscn    CharacterBody3D (WPlayer) + player.gd. Carries a MovementTuning + emote textures.
+entities/watcher.tscn   CharacterBody3D (Watcher) + watcher.gd.
+tasks/*.tscn            task_relay / task_switches / task_valve / task_capacitors / task_buttons (+ task_carry, spare).
+item_pickup.tscn        Look-at "press E to collect" world item (flashlight/phone/keycard/cigs/battery).
+keycard_door.tscn, power_reset_button.tscn, mirror.tscn
+ui/pause_menu.tscn, ui/options_menu.tscn
+items/item_crowbar.tscn, item_fish.tscn, item_baseball_bat.tscn   PhysicsItem toys (the LIVE item system).
+```
+
+**Autoloads:** `Net` (`scripts/net.gd`, ENet host/join), `VoiceManager` (`scripts/voice_manager.gd`, mic level + mute/deafen state), `Transition` (`scripts/transition.gd`, fade + threaded scene loads), `PlayerCustomization` (`scripts/player/player_customization.gd`, blob body/face), and `Cursors` (`scripts/cursor_manager.gd`, swaps the OS cursor SHAPES to the Kenney hand set — `hand_point` at rest, `hand_open` on hover, `hand_closed` fist on click, drawing brush/eraser over the customizer canvas; all 32px. The in-game reticle (dot_small, → hand_open over grabbables) is drawn by the HUD since the mouse is captured).
+
+---
+
+## 5. Folder structure
+
+```
+actors/
+  player/character.tscn        OLD potato rig (character_rig.gd) — DEAD, only a dev screenshot tool uses it.
+  player_hands/                detached_hand_left/right.tscn, detached_hands_pair.tscn (the live hands).
+  player_models/               player_blob_base/black.tscn (PlayerModelView) — the live player BODY.
+assets/        ~1.4GB, ~1283 GLBs: psx/ psx2/ bunkers/ tech/ nature/ van/ models/(angel,hands,furniture)
+               audio/{ambience,sfx,ui,music} fonts/ emotes/ player_blobs/. Most psx2 GLBs are unused.
+interactions/  grab_point.tscn
+items/         PhysicsItem scenes (crowbar/fish/bat).
+materials/     player/ (player_outline.gdshader, face_default.tres).
+resources/     default_game.tres (GameConfig), movement/default_movement.tres (MovementTuning),
+               hand_poses/*.tres (HandPoseResource).
+scenes/        main_menu, lobby, game, bunker, entities/, tasks/, ui/, + item/door/button/mirror scenes.
+               (house.tscn, main.tscn, test_*.tscn are dead/dev — see §9.)
+scripts/       game, player, watcher, lobby, net, voice, voice_manager, power, mirror, item_pickup,
+               interactable, keycard_door, red_button, thrown_phone, audio_gen,
+               items/physics_item, tasks/*, player/*, resources/*, ui/*, interactions/*.
+shaders/       psx_post.gdshader (full-screen PSX dither), watcher.gdshader (body refraction).
+systems/       voice_face_driver.gd (mic amplitude → body mouth/face).
+tools/         dev-only: build_bunker, build_lobby, shot, capture, measure, dump_glb, wrap_player_glb,
+               blender/build_hands.py, etc. (Exclude from shipping builds.)
+```
+
+---
+
+## 6. Live gameplay systems
+
+- **Player (`player.gd`, WPlayer).** Resource-driven movement (`MovementTuning`: accel/decel, sprint panic-burst that widens FOV, gravity, crouch, jump), mouse-look (`tuning.mouse_sensitivity * sens_multiplier`, persistent across scenes), head-bob/breath, **blink stamina** (forced eye-shut; drains faster while camping one angle), emote (world billboard others see + POV overlay you see), tools (flashlight torch, **phone camera-flash stun**, comedic cigarette), capacitor carry, knockback + downed/revive. Local owner drives input; remotes interpolate from replicated `net_*`. *(Still a large god-script — a future pass should split items/blink/emote into components.)*
+  - **Phone flash (`_try_phone_flash`/`_do_flash_stun`/`_net_flash`).** The cellphone is a **limited-use Watcher stun tool, NOT throwable.** Press V aimed at a figure: owner gates `phone_charges`/cooldown locally + fires the blind-flash FX, then the **authority** validates range (`phone_flash_range`) + aim-cone (`phone_flash_angle`) + line-of-sight and calls `watcher.stun()`. **3 charges**, refilled by a **battery** pickup (which now also tops up the torch). Stun is shortened (`phone_stun_late_mult`) while the power's out. All `@export`-tuned on `player.gd`.
+  - **Hand occupancy (torch/item/tool conflict).** One-hand rules so tools don't overlap impossibly: the **torch can't be toggled on while a physics item or two-handed carry occupies your hands**, and grabbing something **snaps the torch off**; the **phone flash is blocked** (`_can_use_tool`) while holding/carrying an item, mid-gesture on a tactile task, or downed (priority: downed > tactile task > held item/carry > tool).
+  - **Item targeting = OUTLINE, not glow.** Both `PhysicsItem` and world `ItemPickup`s show a dirty-gold inverted-hull **outline** (`player_outline.gdshader`) while the local player aims at them — `ItemPickup` no longer emits a constant find-glow light. Pickup/grab requires a real **E press**: press EDGES are short-lived timestamps that expire (`PRESS_WINDOW_MS`), so a stale unconsumed tap can't auto-grab the next thing you look at.
+- **Player BODY = blob.** `character_scene` defaults to `actors/player_models/player_blob_black.tscn`, a **`PlayerModelView`** (extends the `PlayerCharacter` interface in `scripts/player_character.gd`). No legs; waddle/lean/crouch-squash, face glows while talking (voice "who's talking" tell, no UI). The owner's own body is hidden from their camera via a self render-layer; the mirror still draws it.
+- **Detached hands.** `scripts/player/detached_hands_controller.gd` spawns two `DetachedHand`s. The LIVE form (`pose_hands = true`, controller default) is the **low-poly FBX** `assets/models/hands_lowpoly/low_poly_hands.fbx` — 5 swappable POSE meshes per side (open / fist / grab / point / thumbs-up); the controller `set_pose()`s by hand state (idle→open, reach→point, hold→grab, swing→fist, tactile→grab). The FBX imports huge + with its own root transform, so it's instanced under a WRAPPER node that carries `pose_scale`/`pose_euler` (never set rotation on the FBX root directly — it clobbers the import conversion). Older forms remain as fallbacks: a `hand.blend` rounded-cube blob, the procedural spherified cube, and the rigged 3-finger GLBs (`pose_hands=false`). FP rest pose is tuned via the controller's `fp_rest_*` + `fp_*_offset` in `detached_hands_pair.tscn`. Local player sees them as a FP viewmodel; teammates/mirror see them at the body anchors.
+- **Watcher (`watcher.gd`).** PS1 "Biblically Accurate Angel" mesh (spinning rings + a separate eye mesh for the tell). Gaze-freeze, NavMesh chase, catch → **downs** the nearest living player (then retreats so a teammate can revive — not instant game-over), phone stun, outage boldness, anger escalation. Server-authoritative, position + tell synced to clients.
+- **Tasks (`scripts/tasks/`).** Self-driving `Task` base: finds players via group `"players"`, emits `completed`/`progress_changed`, builds its prop in-editor (`@tool`). Live types (10 placed): **relay** (hold-crank), **switches** (ordered lever pulls), **valve** (rotate), **capacitors** (carry-to-socket), **buttons** (follow-the-light sequence), **keypad** (read a colour code off a readout, reproduce it), **breaker_pattern** (toggle breakers to match a displayed up/down diagram), **dial** (rotate a needle into a drifting target band), **stuck_machine** (meme: slap N times), **pet_cat** (meme: hold to pet the loaf). `task_carry` exists but isn't placed. `game.gd` collects every `Task` in group `"tasks"` and wins when all **active** `counts_toward_win` tasks are done — adding a task needs no `game.gd` change.
+  - **Discoverability (no signs).** (1) **Room identity** (`scripts/room_atmosphere.gd`, `RoomAtmosphere`, built by `game.gd::_build_room_atmosphere`): each functional room gets a signature **light colour + looping diegetic hum** (generator=orange/chug, coolant=cyan/hiss, security=green/CRT-fans, electrical=white-blue/buzz, …) so players learn the facility by feel. Data-driven — room centres are derived from the tasks' `zone_display_name` groups, so no bunker edits or hand-placed volumes; the colour lights live under `house/Rooms` so the outage dims them. (2) **Status-lamp beacon** (`Task._update_beacon`): the per-task lamp does a slow "unfinished job" breathe that brightens + pulses faster as a player nears (proximity-driven now; swap for personal-assignment later). Both are pure visual/audio (every peer), not HUD markers. The objectives board (hold TAB) also shows each task's `zone_display_name` room label.
+- **Task pool + round selection (`Task` metadata + `game.gd::_select_round_tasks`).** The bunker AUTHORS a large pool (**25 instances** today); each round only a varied SUBSET is **activated**. Each `Task` carries pool metadata (`difficulty` 1-3, `task_category`, `zone_id`, `requires_two_players`/`min_players_required`, `meme_task`/`puzzle_task`, `allow_personal_assignment`). The selector (authority-only, knobs `@export`ed on `game.gd` under "Task pool / round selection") picks `required_solo + per-extra-player` tasks, biased by easy/medium/hard weights, capped per type, spread across the map, gating co-op to ≥2 players and including ≤1 (rare) meme. Selected tasks are `active=true`; the rest `set_active(false)` → drop their beacon + interact targets + stop simulating (set-dressing only). Selection is broadcast to clients for DISPLAY via `_net_apply_selection` (the win tally is already authority-driven via signals, so selection can't cause a wrong win). Personal per-player assignment + round timer/escalation are deferred — the metadata is in place for them. To add pool variety: drop more task instances into `bunker.tscn`'s `Tasks` node.
+- **Tactile tasks (`scripts/tasks/tactile_task.gd`, `TactileTask`).** Physical hold-and-gesture interactions (GWF-style): look at the part, HOLD E (the detached hand reaches + grips it), and DRAG the mouse — **down for a lever** (`switches`), **circles for a valve** (`valve`). The local player diverts mouse motion (camera look suppressed) into a replicated monotonic accumulator `WPlayer.tactile_input`; the **authority** task diffs it per frame and advances progress with resistance/decay/strain. Gesture style is on the `Interactable` (`interaction_type` = PRESS/PULL/ROTATE, `hold_prompt`). One active user per task. Subclass overrides `_apply_gesture()` (sign/direction) + `_apply_visual()` (move the part). NOTE: the moving part is positioned on the authority — remote clients don't yet see it animate (a future netcode pass); button/relay poke animations also TODO.
+- **Items = PhysicsItem (`scripts/items/physics_item.gd`).** The **one** live item system. A RigidBody that's kinematic-when-held, lerps to a camera-relative hold pose, **E** grab/drop, **hold Q** to charge a throw, **LMB** to swing (windup→active→recovery arc). Hits apply **clamped knockback, never lethal**; a thrown item ignores its own thrower briefly so you can't launch yourself. Per-item feel + optional `HandPoseResource` are exported.
+- **Outage / power (`scripts/power.gd`, PowerSystem).** Periodically kills the lights, emboldens the watcher, and arms the glowing red reset button (`power_reset_button.tscn`); players scramble to slam it. All timing/intensity from `GameConfig`.
+- **Multiplayer.** `Net` (ENet, default UDP 24545; cross-network needs port-forward or a VPN). `MultiplayerSpawner` spawns a player per peer named by peer id; authority resolves by name. Replicated: transform/aim/emote/voice-mouth/flashlight/smoking/crouch + the `*_held` input flags (the server reads rising edges, so tasks/grabs work identically for host & clients). Watcher/tasks/power/win-lose are server-authoritative. Proximity voice via `scripts/voice.gd`.
+- **HUD (`scripts/ui/hud.gd`, GameHUD).** Fully drawn; meters fade in only when relevant (sprint/eyes/flash/voice), bottom-left vitals, bottom-right key prompts, curved throw-charge arc, **hold TAB** objectives board, pickup toasts bottom-left.
+
+---
+
+## 7. Style & UI direction
+
+- **Visual:** PSX/retro — nearest-mip + MSAA 4× + a full-screen dither/colour-reduction pass (`shaders/psx_post.gdshader`, added by `game.gd`/`lobby.gd`). Lobby = warm/fancy/cursed; bunker = cold/industrial/oppressive.
+- **UI palette (shared HUD + menus via `MenuUI`):** champagne **gold** on warm charcoal, ivory text. **Red is reserved for danger only.** Prompts are **key-only** (no boxes): interaction prompt bottom-middle, item actions bottom-right with key glyphs, status bottom-left.
+- **Fonts — keep it to TWO in menus:** **Daydream** (the "WATCHERS" pixel logo) + **Super Pandora** (everything readable — buttons, taglines, hints). Cinzel is used only for the in-game HUD objectives board. `MenuUI.tagline()` uses Super Pandora so menus stay at two fonts — don't reintroduce a third.
+- **Input** is all through the Input Map (`project.godot`) so it stays remappable. Use `Input.is_action_*` / `get_vector(...)`, never raw `KEY_*`.
+
+| Action (Input Map) | Key | Notes |
 |---|---|---|
-| **Movement feel (speed/accel/sprint/sens/bob/FOV)** | `MovementTuning` resource | `resources/movement/default_movement.tres` (Inspector) |
-| **Too dark / can't see** | ↑ `ambient_energy`/`lamp_energy`, ↓ `fog_density` (game.tscn @export); headlamp `@export`s on player | both |
-| Too bright / not scary | reverse the above | both |
-| House too big/small | `room_half_extent`, `door_gap` (game.tscn @export) | `game.gd` |
-| Figures too fast/slow | `MOVE_SPEED` | `watcher.gd` |
-| Caught too easily | `CATCH_DIST` | `watcher.gd` |
-| Too easy/hard overall | `watcher_count` (keep 1–2!), `spawn_ring` (game.tscn @export) | `game.gd` |
-| Relay charge time | `charge_rate`, `charge_range` (@export) | `task_relay.gd` |
-| Carry zone placement | `zone_offset`, `zone_radius` (@export, set per-instance in game.gd) | `task_carry.gd` |
-| Switch puzzle length | `switch_count` (@export, set per-instance) | `task_switches.gd` |
-| Vignette + heartbeat range | `danger_range` (@export) | `game.gd` |
-| Heartbeat loudness/tempo | `heart_min/max_db`, `heart_min/max_pitch` (@export) | `game.gd` |
-| Skitter loudness/falloff | `SKITTER_DB`, `SKITTER_MAX_DIST` | `watcher.gd` |
-| Blink / camping / emote | `blink_*`, `stare_drain`/`move_drain`, `emote_show_time` (@export) | `player.gd` |
-| Figures clump up | `SEP_DIST`, `SEP_FORCE` | `watcher.gd` |
-
-> Most feel-values are now **`@export` (Inspector) or in the `MovementTuning` resource** — open `game.tscn` / `player.tscn` / `default_movement.tres` and tune there. A few internal `const`s remain in `watcher.gd` (`MOVE_SPEED`, `CATCH_DIST`, `SEP_*`) and audio — promote them to `@export` when you next need to tune them live.
+| `move_*` | WASD / arrows | |
+| look | Mouse | captured during play |
+| `sprint` | Shift | panic burst — faster but widens FOV; stamina-gated |
+| `jump` / `crouch` | Space / Ctrl | |
+| `interact` | E | look-at + press/hold: tasks, pickups, grab/drop items, revive, elevator start, red button |
+| `attack` | LMB | swing a held PhysicsItem |
+| `throw` | Q | hold to charge, release to throw a held PhysicsItem |
+| `flashlight` | G | toggle the battery-limited torch (the real light — headlamp is OFF by default) |
+| `throw_phone` | V | **phone camera-flash** — stuns the watcher (range + aim-cone + line-of-sight). 3 charges, cooldown, refill at a battery. (Action name is legacy; it is NOT a throw anymore.) |
+| `smoke` | C | purely comedic cigarette |
+| `emote` | hold F | middle-finger billboard + vine boom |
+| `objectives` | hold TAB | full objectives board |
+| `voice_mute` / `voice_deafen` | M / N | |
+| `pause` | Esc | pause menu (in lobby: opens pause; MP pause is local-only) |
+| `restart` | R | solo only |
 
 ---
 
-## 6. Locked design (from the concept session)
-- **Verb: cover your angle.** The horror is the *handoff* — you must look away to move/charge, and that's when the others move.
-- FP is mandatory: the viewport **is** the mechanic. (Dev prefers FP for immersion.)
-- Premium **$9.99**, no live-service / battlepass / FOMO / gacha / ads / subscription / pay-to-win. Local-first; netcode is a later phase. Cosmetics/maps/modifiers only — never power.
+## 8. Tuning cheat-sheet (symptom → knob → file)
+
+| Symptom | Knob | Where |
+|---|---|---|
+| Movement feel (speed/accel/sprint/sens/bob/FOV) | `MovementTuning` | `resources/movement/default_movement.tres` |
+| Difficulty: watcher count/speed/catch, task length, outage timing, flashlight/cig feel | `GameConfig` | `resources/default_game.tres` (Inspector) |
+| Too dark / bright | `ambient_energy`, `fog_density` (game.gd @export); flashlight `@export`s on `player.gd` | game.gd / player.gd |
+| Watcher speed / catch / separation / anger / stun | `MOVE_SPEED`, `CATCH_DIST`, `SEP_*`, `anger_*`, `stun_time` (@export) | `watcher.gd` |
+| Danger vignette + heartbeat | `danger_range` (GameConfig), `heart_*` (@export) | `game.gd` |
+| Blink / camping | `blink_*`, `stare_drain`/`move_drain` (@export) | `player.gd` |
+| Item weight/throw/swing/knockback/hold-pose | per-item `@export`s + `HandPoseResource` | `items/item_*.tscn`, `physics_item.gd` |
+| Task specifics (charge rate, sequence length, etc.) | per-task `@export`s | `scripts/tasks/task_*.gd` |
+| Hand look / curl / FP rest pose | `@export`s | `detached_hand.gd`, `detached_hands_controller.gd` |
+
+Feel-values are **`@export`/Resource now, not `const`** — tune in the Inspector. A few internal `const`s remain (audio dBs, some watcher constants) — promote to `@export` when you next tune them live.
 
 ---
 
-## 7. Roadmap / next steps
-**Phase 1 — feel (current, local)** ✅ verb proven & fun
-- [x] **Audio** — skitter (`watcher.gd`), heartbeat (`game.gd`), vine-boom emote (`AudioGen`). Procedural.
-- [x] **Blink/stamina**, **danger vignette** (see Update 1).
-- [x] **Movement rework** — Resource-driven (`MovementTuning`): accel/decel + sprint panic-burst that widens FOV.
-- [x] **Bigger house + 1–2 watchers** — fairness via scale, forces "come watch this while I work".
-- [x] **Task system** — reusable `Task` base + relay/carry/switches. Win = all tasks done.
-- [x] **Emote/meme** — F → middle finger + vine boom. **Lobby** warm-up scene with START + gamble toy.
-- [ ] Tune the **panic curve**: movement tuning / `watcher_count` / task counts against real play.
-- [ ] Figure variety (a fast one you must center precisely; a slow tanky one).
-- [ ] Settings depth: a proper **key-rebinding UI** on top of the Input Map; persist options to a config file.
-- [ ] More tasks (see the big list at the bottom of this file / the brief) + a data-driven level layout.
+## 9. Do-NOT-use / dead systems (don't revive these)
 
-**Phase 2 — co-op (the real fantasy)**
-- [ ] Split-screen or P2P so players literally **divide the angles**. Observation + danger are already per-entity, so this is additive, not a rewrite.
-
-**Phase 3 — content (only after feel + co-op)**
-- [ ] More relay layouts / rooms; per-run modifiers; objective variants (carry an item between relays, etc.).
+- **Old melee system** — removed. There is no `held_melee` / `MELEE_MODELS` / `_update_melee` / weapon viewmodel anymore. **Crowbar/fish/bat are `PhysicsItem` only.** Don't reintroduce a second swing path in `player.gd`.
+- **`house.tscn` + `house.gd` + `tools/build_house.gd`** — the old mansion, superseded by `bunker.tscn`. Dead.
+- **`scenes/main.tscn`** — an orphan stub duplicate of `game.tscn`. Don't use it; `game.tscn` is the real gameplay scene.
+- **`character_rig.gd` (potato) + `actors/player/character.tscn`** — the old player rig; the live body is the **blob** (`PlayerModelView`). Only a dev screenshot tool references the potato.
+- **`tools/build_gangbeast_character.gd`** — builds scenes that have been deleted. Dead.
+- **`scenes/test_*.tscn` + `scripts/test_*.gd`** — dev harnesses; not in the game flow.
+- **NEVER regenerate `lobby.tscn` via `tools/build_lobby.gd`** — the lobby is hand-edited; the generator overwrites it. Edit the scene directly. (Same spirit for `bunker.tscn`: prefer editing the scene over re-running `build_bunker.gd`.)
+- **Don't re-export the blob player model or the hand GLBs** without asking — they're hand-tuned; prefer code-side fixes.
 
 ---
 
-## 8. Conventions
-- Feel values are `const` at the top of each script. Edit there.
-- **Scenes are hybrid:** `.tscn` = root node + script only; the script builds its own children in code. Add new entities the same way (trivial `.tscn`, code-built body) so tuning stays in `const` blocks.
-- **Input goes through the Input Map** (`move_*`, `pause`, `restart`, `interact`) so it stays remappable — use `Input.is_action_pressed(...)` / `get_vector(...)`, not raw `KEY_*`.
-- **Audio is procedural** (`AudioGen` builds `AudioStreamWAV`s in code; no assets). Skip `play()` under headless via `AudioGen.is_headless()` — active playbacks leak on force-quit otherwise.
-- The first run on a fresh machine needs `--import` once so `WPlayer`/`Watcher`/`Relay`/`AudioGen`/menu `class_name`s register, else you'll see "Could not find type" parse errors.
-- Watch out for `abs()` (returns Variant, breaks `:=` inference) — use `absf()`/`absi()`.
-- GDScript `static var`s that hold a RefCounted (e.g. a cached stream) **leak at exit** — they outlive SceneTree teardown. Build per-instance or free explicitly.
-- Related projects: **SHIFT BREAKERS** (`Documents/shift-breakers`, throw/catch relay) and **SCRAP** (`Documents/scrap`, junk-climbing). Don't conflate.
+## 10. Known current issues
+
+- **Lobby visual bugs** (need a live F5 pass): bat invisible, elevator blocked, mirror glitch, stretched painting.
+- **Music license risk:** `assets/audio/music/lobby_jazz.mp3` is a YouTube "No Copyright" track — **NOT verified for commercial release**. See `assets/audio/music/LICENSE_NOTES.md`. Shipping blocker until verified or replaced. (It's also a 72MB `.mp3` that should become `.ogg`.)
+- **Export bloat:** `export_presets.cfg` uses `export_filter="all_resources"` → the whole ~1.4GB asset tree (incl. unused `psx2/`) bundles into the build. Add include/exclude filters before shipping.
+- **`player.gd` is large** (god-script) — split items/blink/emote into components in a future pass.
+- **`game.tscn` references a stale UID** for `bunker.tscn` (`uid://…`); it falls back to the text path (harmless warning). Re-saving `game.tscn` in the editor clears it.
+- **`anger_time`** defaults very high, so the watcher's anger escalation effectively never fires in a normal run — tune it or treat it as latent.
+- **Client-side hands** only grip a `PhysicsItem` for the local holder (held_item isn't replicated) — a known gap for a future hands/netcode pass, not a regression.
+
+---
+
+## 11. Conventions & gotchas
+
+- **Scenes are hybrid:** a `.tscn` is usually a root node + script; the script builds children in code. The big authored scenes (`bunker.tscn`, `lobby.tscn`) are the exception — edit them in the editor.
+- **Feel-values:** `@export` / Resource (Inspector), not `const`.
+- **Input:** Input Map only (see §7).
+- **Audio:** a MIX — real `.ogg` assets in `assets/audio/{ambience,sfx,ui,music}` **plus** procedural DSP in `scripts/audio_gen.gd` (heartbeat / skitter / vine-boom). Guard one-shots with `AudioGen.is_headless()` so headless runs don't leak playbacks. (There is currently **no Master/Music/SFX/Voice bus split** — a future audio pass should add one so options sliders can route per-category.)
+- **First run on a fresh machine:** do one `--import` pass so `class_name`s (`WPlayer`, `Watcher`, `Task`, `PhysicsItem`, `PlayerCharacter`, `AudioGen`, `MenuUI`, …) register, else you'll see "Could not find type" parse errors.
+- Use `absf()`/`absi()`, not `abs()` (Variant return breaks `:=` inference).
+- GDScript `static var`s holding a RefCounted **leak at exit** (they outlive SceneTree teardown) — build per-instance or free explicitly.
+- Related but separate projects: **SHIFT BREAKERS** (`Documents/shift-breakers`) and **SCRAP** (`Documents/scrap`). The dropped sibling **DEEP POCKETS** lives at `Documents/deep-pockets` and is not pursued. Don't conflate any of these with WATCHERS.
+
+---
+
+## 12. Roadmap (next, in priority order)
+
+1. **Ship-blockers:** verify/replace lobby music license; set export filters (drop unused assets).
+2. **Consolidation:** split `player.gd` into components; relocate `test_*`/dev tools out of shipping dirs; delete the dead scenes/scripts in §9 once confirmed.
+3. **Polish:** fix the 4 lobby visual bugs; add an audio bus layout; tune `anger_time` (or cut it honestly).
+4. **Depth:** key-rebinding UI + options persistence; figure variety (a precise-aim fast one, a slow tanky one); use `tech/` assets for more tactile tasks; place the spare carry task.
+5. **Netcode hardening:** reconnect handling, MP restart/return-to-lobby, client-side hand gripping of physics items.

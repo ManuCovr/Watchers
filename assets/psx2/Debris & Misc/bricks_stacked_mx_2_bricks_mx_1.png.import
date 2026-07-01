@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://eywac2igwcsk"
-path="res://.godot/imported/bricks_stacked_mx_2_bricks_mx_1.png-baa6fd417aa08db8081916502be870bb.ctex"
+path.s3tc="res://.godot/imported/bricks_stacked_mx_2_bricks_mx_1.png-baa6fd417aa08db8081916502be870bb.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "ea147290b05d3243bad40acbd18f43a6"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx2/Debris & Misc/bricks_stacked_mx_2_bricks_mx_1.png"
-dest_files=["res://.godot/imported/bricks_stacked_mx_2_bricks_mx_1.png-baa6fd417aa08db8081916502be870bb.ctex"]
+dest_files=["res://.godot/imported/bricks_stacked_mx_2_bricks_mx_1.png-baa6fd417aa08db8081916502be870bb.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bh0u32e6woxvs"]
+
+[ext_resource type="Script" path="res://scripts/test_tactile.gd" id="1"]
+
+[node name="TestTactile" type="Node3D"]
+script = ExtResource("1")

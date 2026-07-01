@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ym65pmvrk85y"
-path="res://.godot/imported/catwalk_1_floor_3_metal_1.png-5b866696c7bbe424a70eba1317c85b14.ctex"
+path.s3tc="res://.godot/imported/catwalk_1_floor_3_metal_1.png-5b866696c7bbe424a70eba1317c85b14.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "b6af84570cf744e9a96c139f6bbe405b"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx/Modular Structures/catwalk_1_floor_3_metal_1.png"
-dest_files=["res://.godot/imported/catwalk_1_floor_3_metal_1.png-5b866696c7bbe424a70eba1317c85b14.ctex"]
+dest_files=["res://.godot/imported/catwalk_1_floor_3_metal_1.png-5b866696c7bbe424a70eba1317c85b14.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

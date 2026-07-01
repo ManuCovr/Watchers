@@ -3,6 +3,13 @@ extends SceneTree
 ## (everything is real nodes). Re-run to start over.
 ##   Godot_console.exe --headless --path <proj> --script res://tools/build_bunker.gd
 ##
+## GOTCHA: the room/tunnel doorway openings are dressed with real `tunnel_hole_2.glb` arched frames
+## that live in a SEPARATE scene, res://scenes/tunnel_fixes.tscn (built by tools/build_tunnel_fixes.gd),
+## which is instanced into bunker.tscn as the "TunnelConnectionFixes" node. RE-RUNNING THIS GENERATOR
+## OVERWRITES bunker.tscn and DROPS that instance — re-run build_tunnel_fixes.gd and re-add the
+## instance afterwards (or fold the frame placement in here) so the connections don't revert to bare
+## box holes with void corners.
+##
 ## This pass: a VARIED irregular facility — long & short halls, a 4-way intersection, dead ends,
 ## big & small rooms, TWO-STOREY rooms (mezzanine + ramp) and a BASEMENT (ramp down). Tasks are
 ## MOUNTED against walls (floor-standing, never midair); item pickups sit ON crates; the arrival

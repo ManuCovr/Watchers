@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://biunn8ptbfc6b"]
 
-[ext_resource type="Script" path="res://scripts/watcher.gd" id="1"]
+[ext_resource type="Script" uid="uid://so5a8jynmno" path="res://scripts/watcher.gd" id="1"]
 
-[node name="Watcher" type="CharacterBody3D"]
+[node name="Watcher" type="CharacterBody3D" unique_id=952719583]
 script = ExtResource("1")

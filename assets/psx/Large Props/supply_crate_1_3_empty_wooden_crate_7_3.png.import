@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ccbxg2b3stulh"
-path="res://.godot/imported/supply_crate_1_3_empty_wooden_crate_7_3.png-35aec0a3e1aea597b7db6415d4bf622b.ctex"
+path.s3tc="res://.godot/imported/supply_crate_1_3_empty_wooden_crate_7_3.png-35aec0a3e1aea597b7db6415d4bf622b.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8a9d1095bf090c1c7a50ff43236a418a"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx/Large Props/supply_crate_1_3_empty_wooden_crate_7_3.png"
-dest_files=["res://.godot/imported/supply_crate_1_3_empty_wooden_crate_7_3.png-35aec0a3e1aea597b7db6415d4bf622b.ctex"]
+dest_files=["res://.godot/imported/supply_crate_1_3_empty_wooden_crate_7_3.png-35aec0a3e1aea597b7db6415d4bf622b.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

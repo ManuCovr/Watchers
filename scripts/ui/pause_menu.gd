@@ -32,7 +32,6 @@ func _ready() -> void:
 	_root.add_child(col)
 
 	col.add_child(MenuUI.title("PAUSED", 76))
-	col.add_child(MenuUI.tagline("the others haven't stopped"))
 	col.add_child(_spacer(20))
 
 	var resume := MenuUI.button("Resume", true)
@@ -78,4 +77,4 @@ func _on_options_closed() -> void:
 func _on_main_menu() -> void:
 	get_tree().paused = false
 	WPlayer.input_blocked = false
-	get_tree().change_scene_to_file(MAIN_MENU)
+	Transition.change_scene(MAIN_MENU)

@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bkqy0q4ddk01q"
-path="res://.godot/imported/misc_tool_mx_3_misc_tool_mx_3.png-f7bfafebf6882c893e445f85d6b65044.ctex"
+path.s3tc="res://.godot/imported/misc_tool_mx_3_misc_tool_mx_3.png-f7bfafebf6882c893e445f85d6b65044.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "0d30fec6d988b73b6af96660d4819671"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx2/Weapons & Tools/misc_tool_mx_3_misc_tool_mx_3.png"
-dest_files=["res://.godot/imported/misc_tool_mx_3_misc_tool_mx_3.png-f7bfafebf6882c893e445f85d6b65044.ctex"]
+dest_files=["res://.godot/imported/misc_tool_mx_3_misc_tool_mx_3.png-f7bfafebf6882c893e445f85d6b65044.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

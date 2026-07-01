@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ljw4uos5ufrw"
-path="res://.godot/imported/padlock_2_knob_padlock_2.png-c28a040904afb8d9f279710d34ee2e45.ctex"
+path.s3tc="res://.godot/imported/padlock_2_knob_padlock_2.png-c28a040904afb8d9f279710d34ee2e45.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "6ab46ed81af1237afab4c0bb00a5ab95"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx/Small Props/padlock_2_knob_padlock_2.png"
-dest_files=["res://.godot/imported/padlock_2_knob_padlock_2.png-c28a040904afb8d9f279710d34ee2e45.ctex"]
+dest_files=["res://.godot/imported/padlock_2_knob_padlock_2.png-c28a040904afb8d9f279710d34ee2e45.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

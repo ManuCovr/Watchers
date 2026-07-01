@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://b4gxi7sixkuvm"]
+
+[ext_resource type="Script" uid="uid://0ale1wwxccy0" path="res://scripts/player/player_model_view.gd" id="1_pmv"]
+
+[node name="PlayerBlobModel" type="Node3D" unique_id=1911377175]
+script = ExtResource("1_pmv")
+outline_thickness = 0.03
+
+[node name="FaceAnchor" type="Marker3D" parent="." unique_id=908605588]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, -0.35)
+
+[node name="LeftHandAnchor" type="Marker3D" parent="." unique_id=1834394210]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4, 0.78, -0.34)
+
+[node name="RightHandAnchor" type="Marker3D" parent="." unique_id=987980109]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.4, 0.78, -0.34)
+
+[node name="NameplateAnchor" type="Marker3D" parent="." unique_id=1904597250]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.85, 0)

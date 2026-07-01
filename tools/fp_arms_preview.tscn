@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cfparmsprev01"]
+
+[ext_resource type="Script" path="res://tools/fp_arms_preview.gd" id="1_prev"]
+
+[node name="FpArmsPreview" type="Node3D"]
+script = ExtResource("1_prev")

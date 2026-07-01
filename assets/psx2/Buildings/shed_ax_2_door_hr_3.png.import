@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://mb4qn5yh0r5m"
-path="res://.godot/imported/shed_ax_2_door_hr_3.png-d80e643ce0b1f50b5417a646facfb3da.ctex"
+path.s3tc="res://.godot/imported/shed_ax_2_door_hr_3.png-d80e643ce0b1f50b5417a646facfb3da.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "c0f3a501422ef6b368eab69121232531"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/psx2/Buildings/shed_ax_2_door_hr_3.png"
-dest_files=["res://.godot/imported/shed_ax_2_door_hr_3.png-d80e643ce0b1f50b5417a646facfb3da.ctex"]
+dest_files=["res://.godot/imported/shed_ax_2_door_hr_3.png-d80e643ce0b1f50b5417a646facfb3da.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

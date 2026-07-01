@@ -11,24 +11,56 @@ const MAIN_MENU := "res://scenes/main_menu.tscn"
 @export var descend_time := 1.3        ## fade-to-black duration on descent
 @export var start_radius := 2.4        ## how close to the elevator you must be to descend
 
+const CUSTOMIZE_MENU := preload("res://scenes/ui/player_customization_menu.tscn")
+
 var _players_node: Node3D
 var _spawner: MultiplayerSpawner
 var _start_pos := Vector3(0, 0, -7.6)
 var _descending := false
 var _pause: PauseMenu
+# Customization "vanity" station = the lobby mirror. Walk up to it, press E to open the customizer.
+var _vanity_pos := Vector3(-8.5, 0, 2)
+var _vanity_radius := 2.8
+var _custom_menu: PlayerCustomizationMenu
+var _custom_prompt: Label
+var _custom_button: Interactable
+var _custom_cap: Node3D
+var _custom_cap_rest := Vector3.ZERO
+# Pettable cat loaf — authored node "Lounge/Cat" in lobby.tscn (move it in the editor).
+var _cat: Node3D
+var _cat_pos := Vector3.ZERO
+var _cat_base_y := 0.0
+var _cat_base_scale := 1.0
+var _cat_radius := 2.6
+var _cat_prompt: Label3D
+var _patting := false
+var _pat_tween: Tween
+## When true the lobby is just a VISUAL backdrop (for the main menu): the room + lights + jazz, but
+## no player spawn / HUD / toys / pause / descent. The main menu supplies its own panning camera.
+var backdrop_mode := false
 
 
 func _ready() -> void:
+	if backdrop_mode:
+		return                              # main-menu backdrop: room + env + jazz only
 	WPlayer.input_blocked = false
 	VoiceManager.lobby_mode = true
+	PhysicsItem.lobby_mode = true          # lobby toys = knockback only, never down/kill
 	# The Mirror (scenes/mirror.tscn) is self-driving — it finds the player camera and renders
 	# its own reflection. Nothing to wire here anymore.
 	var sz := get_node_or_null("Elevator/StartZone") as Node3D
 	if sz != null:
 		_start_pos = sz.global_position
+	# Anchor the customization station in front of the lobby mirror (a dressing mirror).
+	var mirror := get_node_or_null("Mirror") as Node3D
+	if mirror != null:
+		_vanity_pos = mirror.global_position + Vector3(1.6, 0, 0)   # stand a step into the room
+		_vanity_pos.y = 0.0
+		_build_vanity_sign(mirror.global_position)
+	_build_custom_button()
+	_build_cat()
 	_build_players()
 	_build_hud()
-	_build_toys()                # crowbar + fish to whack your friends with
 	add_child(PSXPost.new())     # same retro look as gameplay (menus stay crisp)
 
 
@@ -73,23 +105,15 @@ func _local_player() -> WPlayer:
 
 
 # ---- friendslop toys: grabbable melee weapons -------------------------------
-func _build_toys() -> void:
-	var spawn := get_node_or_null("PlayerSpawn") as Node3D
-	var base := spawn.global_position if spawn != null else Vector3(0, 0.4, 4.5)
-	base.y = 0.3
-	_add_pickup("crowbar", "res://assets/psx2/Structures/rusty_crowbar_mx_1.glb", base + Vector3(-1.5, 0, -1.5))
-	_add_pickup("fish", "res://assets/psx2/Props/fish_mx_1.glb", base + Vector3(1.5, 0, -1.5))
-	_add_pickup("fish", "res://assets/psx2/Props/fish_mx_1.glb", base + Vector3(2.4, 0, -1.0))
+const CROWBAR := preload("res://items/item_crowbar.tscn")
+const BAT := preload("res://items/item_baseball_bat.tscn")
 
 
-func _add_pickup(kind: String, model: String, pos: Vector3) -> void:
-	var pk := preload("res://scenes/item_pickup.tscn").instantiate() as ItemPickup
-	pk.kind = kind
-	pk.model_path = model
-	pk.model_scale = 2.2 if kind == "fish" else 1.6
-	pk.model_euler = Vector3(0, 0, 90)     # crowbar/fish are long on X -> stand them vertical
-	pk.position = pos
-	add_child(pk)
+
+func _add_toy(scene: PackedScene, pos: Vector3) -> void:
+	var it := scene.instantiate() as PhysicsItem
+	it.position = pos
+	add_child(it)
 
 
 # ---- HUD --------------------------------------------------------------------
@@ -110,9 +134,241 @@ func _build_hud() -> void:
 	l.text = "step into the elevator and press E to descend"
 	layer.add_child(l)
 
+	# "[E] CUSTOMIZE" prompt — shown only when stood at the mirror (see _process).
+	_custom_prompt = Label.new()
+	_custom_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_custom_prompt.position = Vector2(0, -120)
+	_custom_prompt.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_custom_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_custom_prompt.add_theme_font_override("font", MenuUI.font(MenuUI.UI_FONT))
+	_custom_prompt.add_theme_font_size_override("font_size", 26)
+	_custom_prompt.add_theme_color_override("font_color", MenuUI.ACCENT_HOT)
+	_custom_prompt.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	_custom_prompt.add_theme_constant_override("outline_size", 6)
+	_custom_prompt.text = "[ E ]  CUSTOMIZE"
+	_custom_prompt.visible = false
+	layer.add_child(_custom_prompt)
+
+
+# ---- customization station (lobby-only) -------------------------------------
+## A physical hanging placard above the mirror — a smoked-glass panel in a brass frame on two hangers,
+## "CUSTOMIZE / make your little guy" printed on its face. Faces +X (the player stands a step out on
+## +X and looks back at the mirror, see _vanity_pos), so it always reads correctly. Gently bobs.
+func _build_vanity_sign(mirror_pos: Vector3) -> void:
+	var station := Node3D.new()
+	station.name = "VanitySign"
+	station.position = mirror_pos + Vector3(0.95, 1.34, 0.0)   # hung above the mirror, into the room
+	station.rotation.y = PI / 2.0                               # face +X (the standing player)
+	add_child(station)
+
+	# brass frame
+	var frame := MeshInstance3D.new()
+	var fmesh := BoxMesh.new(); fmesh.size = Vector3(1.06, 0.5, 0.05)
+	frame.mesh = fmesh
+	frame.material_override = _sign_mat(Color(0.74, 0.58, 0.30), 0.9, 0.30)
+	station.add_child(frame)
+
+	# smoked-glass panel slightly proud of the frame
+	var panel := MeshInstance3D.new()
+	var pmesh := BoxMesh.new(); pmesh.size = Vector3(0.96, 0.40, 0.06)
+	panel.mesh = pmesh
+	panel.position.z = 0.02
+	panel.material_override = _sign_mat(Color(0.05, 0.045, 0.06), 0.0, 0.10, Color(0.10, 0.07, 0.05))
+	station.add_child(panel)
+
+	# printed face — local +Z is world +X (toward the player); no_depth_test draws it over the panel
+	station.add_child(_sign_text("CUSTOMIZE", MenuUI.UI_FONT, 92, 0.0015,
+		Color(0.96, 0.82, 0.46), Vector3(0, 0.055, 0.075), 14))
+	station.add_child(_sign_text("make your little guy", MenuUI.BODY_FONT, 46, 0.0013,
+		Color(0.85, 0.80, 0.70), Vector3(0, -0.095, 0.075), 9))
+
+	# two brass hangers up toward the wall
+	for sx in [-0.4, 0.4]:
+		var rod := MeshInstance3D.new()
+		var rmesh := CylinderMesh.new()
+		rmesh.top_radius = 0.012; rmesh.bottom_radius = 0.012; rmesh.height = 0.34
+		rod.mesh = rmesh
+		rod.material_override = _sign_mat(Color(0.7, 0.56, 0.3), 0.9, 0.18)
+		rod.position = Vector3(sx, 0.42, 0.0)
+		station.add_child(rod)
+
+	# soft attract bob
+	var tw := create_tween().set_loops().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(station, "position:y", station.position.y + 0.04, 1.8)
+	tw.tween_property(station, "position:y", station.position.y, 1.8)
+
+
+func _sign_mat(col: Color, metallic: float, glow: float, glow_col := Color.BLACK) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = col
+	m.metallic = metallic
+	m.roughness = 0.35 if metallic > 0.5 else 0.6
+	if glow > 0.0:
+		m.emission_enabled = true
+		m.emission = col if glow_col == Color.BLACK else glow_col
+		m.emission_energy_multiplier = glow
+	return m
+
+
+func _sign_text(text: String, font_path: String, fsize: int, px: float, col: Color,
+		pos: Vector3, outline: int) -> Label3D:
+	var l := Label3D.new()
+	l.text = text
+	l.font = MenuUI.font(font_path)
+	l.font_size = fsize
+	l.pixel_size = px
+	l.modulate = col
+	l.outline_modulate = Color(0, 0, 0, 0.9)
+	l.outline_size = outline
+	l.shaded = false
+	l.double_sided = false       # only readable from the front (not through the back of the panel)
+	l.no_depth_test = false      # let the solid panel occlude it from behind
+	l.render_priority = 2
+	l.position = pos
+	return l
+
+
+func _process(_delta: float) -> void:
+	if backdrop_mode or _descending:
+		return
+	var p := _local_player()
+	# ---- CUSTOMIZE: look at the button on its stand + press E (the hand pokes it) ----
+	if _custom_prompt != null:
+		_custom_prompt.visible = false        # the button's own HUD prompt does the job now
+	if _custom_button != null and p != null and not p._downed and _custom_menu == null \
+			and p.aimed == _custom_button and p.consume_interact():
+		_press_custom()
+		return
+
+	# ---- pettable cat (spam-pat encouraged) ----
+	if _cat != null and is_instance_valid(_cat):
+		var cat_near := false
+		if p != null and not p._downed and _custom_menu == null:
+			var cd := Vector2(p.global_position.x - _cat_pos.x, p.global_position.z - _cat_pos.z)
+			cat_near = cd.length() <= _cat_radius
+		if _cat_prompt != null:
+			_cat_prompt.visible = cat_near
+		if not _patting:
+			_cat.position.y = _cat_base_y + sin(Time.get_ticks_msec() * 0.002) * 0.012   # breathing
+		if cat_near and p.consume_interact():
+			_pat_cat()
+
+
+## Wrap the authored "CustomizeButton" GLB (move/scale it in the editor) with an Interactable so you
+## can look at it + press E. The green cap (its divided _child mesh) depresses on press.
+func _build_custom_button() -> void:
+	var bglb := get_node_or_null("CustomizeButton") as Node3D
+	if bglb == null:
+		return
+	_custom_cap = _find_part(bglb, "child")
+	if _custom_cap != null:
+		_custom_cap_rest = _custom_cap.position
+	var btn := Interactable.new()
+	btn.prompt = "Customize"
+	btn.add_box(Vector3(0.5, 0.5, 0.45))
+	add_child(btn)
+	btn.global_position = _custom_cap.global_position if _custom_cap != null else bglb.global_position
+	_custom_button = btn
+
+
+## Depress the green cap (into the wall) then open the customizer.
+func _press_custom() -> void:
+	if _custom_cap != null and is_instance_valid(_custom_cap):
+		var down := _custom_cap_rest - Vector3(0, 0.013, 0)   # cap sinks along its local -Y
+		var tw := create_tween()
+		tw.tween_property(_custom_cap, "position", down, 0.05)
+		tw.tween_property(_custom_cap, "position", _custom_cap_rest, 0.12)
+	_open_custom()
+
+
+## Recursive find of a descendant whose name contains `frag` (case-insensitive).
+func _find_part(root: Node, frag: String) -> Node3D:
+	if root is Node3D and frag.to_lower() in String(root.name).to_lower():
+		return root
+	for c in root.get_children():
+		var r := _find_part(c, frag)
+		if r != null:
+			return r
+	return null
+
+
+func _open_custom() -> void:
+	if _custom_menu != null:
+		return
+	_custom_menu = CUSTOMIZE_MENU.instantiate()
+	add_child(_custom_menu)
+	_custom_menu.closed.connect(_close_custom)
+	if _custom_prompt != null:
+		_custom_prompt.visible = false
+	WPlayer.input_blocked = true                  # local only — others keep hanging out
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _close_custom() -> void:
+	if _custom_menu != null:
+		_custom_menu.queue_free()
+		_custom_menu = null
+	WPlayer.input_blocked = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	var p := _local_player()
+	if p != null and p.has_method("broadcast_face"):
+		p.broadcast_face()              # multiplayer: push the finished face once
+
+
+# ---- pettable cat loaf ------------------------------------------------------
+## The cat loaf is the authored node "Lounge/Cat" (move/scale it in the editor). Walk up (your hands
+## come into view), press E to pat it — it squishes with a happy wobble + meows. Spam it all you want.
+func _build_cat() -> void:
+	_cat = get_node_or_null("Lounge/Cat") as Node3D
+	if _cat == null:
+		return
+	_cat_base_scale = _cat.scale.x
+	_cat_pos = _cat.global_position
+	_cat_base_y = _cat.position.y
+
+	var lbl := Label3D.new()
+	lbl.text = "Press E to pat"
+	lbl.font = MenuUI.font(MenuUI.UI_FONT)
+	lbl.font_size = 64
+	lbl.pixel_size = 0.0032
+	lbl.modulate = MenuUI.ACCENT_HOT
+	lbl.outline_modulate = Color(0, 0, 0, 0.9)
+	lbl.outline_size = 12
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.no_depth_test = true
+	lbl.visible = false
+	lbl.position = _cat_pos + Vector3(0, 0.55, 0)
+	add_child(lbl)
+	_cat_prompt = lbl
+
+
+## Re-triggerable: each press restarts the squish + a (pitch-varied) meow, so spamming feels great.
+func _pat_cat() -> void:
+	if _cat == null:
+		return
+	if _pat_tween != null and _pat_tween.is_valid():
+		_pat_tween.kill()
+	_patting = true
+	if not AudioGen.is_headless():
+		var meow := load("res://assets/audio/sfx/cat_meow.wav")
+		if meow != null:
+			var a := AudioStreamPlayer.new()
+			a.stream = meow
+			a.volume_db = -5.0
+			a.pitch_scale = randf_range(0.9, 1.15)   # variety so spam isn't identical
+			add_child(a); a.play(); a.finished.connect(a.queue_free)
+	var s := _cat_base_scale
+	_pat_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_pat_tween.tween_property(_cat, "scale", Vector3(s * 1.2, s * 0.66, s * 1.2), 0.08)   # squish
+	_pat_tween.tween_property(_cat, "scale", Vector3(s, s, s), 0.4).set_trans(Tween.TRANS_ELASTIC)
+	_pat_tween.parallel().tween_property(_cat, "position:y", _cat_base_y, 0.4)
+	_pat_tween.tween_callback(func(): _patting = false)
+
 
 # ---- start / descent --------------------------------------------------------
 func _unhandled_input(event: InputEvent) -> void:
+	if backdrop_mode or _custom_menu != null:
+		return                              # the customizer handles its own close (Esc)
 	if event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
 		if _pause != null and _pause.visible:
@@ -139,13 +395,15 @@ func _close_pause() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if not Net.is_authority():
+	if backdrop_mode or not Net.is_authority():
 		return
 	for n in get_tree().get_nodes_in_group("players"):
 		var p := n as WPlayer
 		if p == null or p._downed:
 			continue
-		if p.consume_interact() and p.global_position.distance_to(_start_pos) <= start_radius:
+		# Distance FIRST — only consume the E press when you're actually at the elevator, otherwise
+		# it steals every interact and you can never grab the physics toys.
+		if p.global_position.distance_to(_start_pos) <= start_radius and p.consume_interact():
 			if Net.is_active():
 				_go_to_game.rpc()
 			else:
@@ -163,6 +421,19 @@ func _descend() -> void:
 		return
 	_descending = true
 	WPlayer.input_blocked = true
+	# Slide the elevator doors SHUT first (with a door sound), then fade to black.
+	var dl := get_node_or_null("Elevator/DoorL") as Node3D
+	var dr := get_node_or_null("Elevator/DoorR") as Node3D
+	if dl != null and dr != null:
+		if not AudioGen.is_headless():
+			var ds := load("res://assets/audio/sfx/heavy_door_open-close_1.ogg")
+			if ds != null:
+				var a := AudioStreamPlayer.new(); a.stream = ds; a.volume_db = -5.0
+				add_child(a); a.play(); a.finished.connect(a.queue_free)
+		var dt := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		dt.tween_property(dl, "position:x", -0.36, 0.95)
+		dt.tween_property(dr, "position:x", 0.36, 0.95)
+		await dt.finished
 	var layer := CanvasLayer.new(); layer.layer = 200; add_child(layer)
 	var rect := ColorRect.new()
 	rect.color = Color(0, 0, 0, 0)
@@ -179,4 +450,5 @@ func _descend() -> void:
 	t.tween_property(rect, "color", Color(0, 0, 0, 1), descend_time)
 	await t.finished
 	await get_tree().create_timer(0.4).timeout
-	get_tree().change_scene_to_file(GAME)
+	# The bunker is the heavy scene — hand off to the threaded LOADING screen ("DESCENDING").
+	Transition.change_scene(GAME, true)

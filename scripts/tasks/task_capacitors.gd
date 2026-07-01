@@ -26,6 +26,9 @@ var _placed_n := 0
 func _build() -> void:
 	if is_default_title():
 		task_title = "Transport the capacitors"
+	task_category = &"carry"
+	difficulty = 2
+	estimated_duration = 10.0
 	# A rack the capacitors start on.
 	var rack := make_model("res://assets/psx/Furniture/shelf_mp_3.glb",
 		Vector3(1.4, 1.0, 0.5), Color(0.18, 0.18, 0.2), 1.0)

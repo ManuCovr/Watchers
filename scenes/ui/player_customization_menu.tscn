@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://c8customi0e01"]
+
+[ext_resource type="Script" path="res://scripts/ui/player_customization_menu.gd" id="1_cust"]
+
+[node name="PlayerCustomizationMenu" type="CanvasLayer"]
+script = ExtResource("1_cust")

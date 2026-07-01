@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://ytppomfbllvo"]
+
+[ext_resource type="Script" uid="uid://cbgkoydlt8vnx" path="res://scripts/player/detached_hand.gd" id="1"]
+
+[node name="DetachedHandLeft" type="Node3D" unique_id=825106569]
+script = ExtResource("1")
+is_left = true
